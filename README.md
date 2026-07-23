@@ -47,7 +47,7 @@ components/ 대시보드 UI 컴포넌트
 - ESP32 노드는 3초마다 `alerts` 테이블에서 **자기 층 앞으로 온 pending 경고**를 조회합니다.
 - 자동 감지 경고(음성 메시지 없음)는 부저로 3회 경고음(삑삑삑)을 재생합니다.
 - 경비실이 층 상세 페이지에서 문구를 선택하거나 직접 입력해 보낸 경고는 서버가 TTS로 음성을
-  합성해 Supabase Storage에 올리고, ESP32가 그 mp3를 내려받아 I2S 스피커로 재생합니다
+  합성해 Supabase Storage에 올리고, ESP32가 그 wav를 내려받아 I2S 스피커로 재생합니다
   (자세한 내용은 "1-5. 음성 경고 메시지" 참고).
 - 재생 후 상태를 `delivered`로 갱신하며, 경비실은 대시보드에서 경고를 "확인 완료" 처리할 수
   있습니다.
@@ -81,12 +81,17 @@ components/ 대시보드 UI 컴포넌트
 해당 층 스피커로 실제 음성 메시지를 보낼 수 있습니다.
 
 1. 경비실이 문구 선택/입력 후 전송 → `/api/alerts`(POST)가 텍스트를 받는다
-2. 서버가 Google Cloud Text-to-Speech로 mp3를 합성해 Supabase Storage(`alert-audio`
-   버킷)에 업로드하고, `alerts.message`(원문 텍스트)와 `alerts.audio_url`(공개 mp3 URL)을
-   저장한다
-3. 해당 층 ESP32 노드가 폴링 중 이 경고를 발견하면 mp3를 LittleFS에 내려받아 I2S 앰프로
-   재생한다 (다운로드/디코딩 실패 시 기본 부저 경고음으로 자동 대체)
+2. 서버가 **Gemini API**(Google AI Studio 키, `gemini-2.5-flash-preview-tts` 모델)로 음성을
+   합성한다. Gemini는 raw PCM을 반환하므로 서버에서 표준 wav 헤더를 붙여 Supabase
+   Storage(`alert-audio` 버킷)에 업로드하고, `alerts.message`(원문 텍스트)와
+   `alerts.audio_url`(공개 wav URL)을 저장한다
+3. 해당 층 ESP32 노드가 폴링 중 이 경고를 발견하면 wav를 LittleFS에 내려받아 I2S 앰프로
+   재생한다 (다운로드/재생 실패 시 기본 부저 경고음으로 자동 대체)
 4. 메시지 없이 "기본 경고음만 보내기"를 선택하면 기존과 동일하게 부저 알림만 울린다
+
+> Google Cloud Text-to-Speech(`texttospeech.googleapis.com`)와 Gemini API는 서로 다른
+> 제품입니다. Google AI Studio에서 발급한 Gemini API 키는 Cloud TTS에는 쓸 수 없지만,
+> Gemini 모델 자체의 음성 합성 기능(위 방식)에는 그대로 사용할 수 있습니다.
 
 ## 2. 하드웨어 (arduino/noise_node)
 
@@ -113,7 +118,7 @@ components/ 대시보드 UI 컴포넌트
 1. Arduino IDE에 ESP32 보드 패키지 설치, 라이브러리 매니저에서 `ArduinoJson`,
    `ESP8266Audio`(Earle F. Philhower) 설치
 2. Tools → Partition Scheme에서 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs") 선택
-   — 다운로드한 음성 mp3를 임시로 저장하는 데 사용됩니다
+   — 다운로드한 음성 wav를 임시로 저장하는 데 사용됩니다
 3. `arduino/noise_node/config.example.h`를 같은 폴더에 `config.h`로 복사
 4. `config.h`에 WiFi 정보, Supabase URL/anon key, `FLOOR_ID`(이 노드가 담당하는 층) 입력
 5. 층마다 `FLOOR_ID`만 바꿔서 각 노드에 업로드
@@ -161,8 +166,9 @@ npm run dev
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (서버 전용, `NEXT_PUBLIC_` 접두사 없음에 주의)
-   - `GOOGLE_TTS_API_KEY` (Google Cloud Console에서 Text-to-Speech API를 활성화하고 발급한 키.
-     경비실 음성 메시지 기능에만 사용되며, 없어도 빌드/기본 경고음 기능은 정상 동작한다)
+   - `GEMINI_API_KEY` ([Google AI Studio](https://aistudio.google.com/apikey)에서 발급한
+     Gemini API 키. 경비실 음성 메시지 기능에만 사용되며, 없어도 빌드/기본 경고음 기능은
+     정상 동작한다)
 3. Deploy
 
 ### 화면 구성
@@ -179,8 +185,9 @@ npm run dev
   운영 환경에서는 루트 CA 고정을 권장합니다.
 - 경고 폴링 주기(3초)로 인해 최대 수 초의 지연이 있을 수 있습니다. 지연을 더 줄이려면
   ESP32에서 Supabase Realtime(WebSocket) 구독으로 전환할 수 있습니다.
-- 음성 메시지는 노드가 mp3를 전부 내려받은 뒤 재생을 시작하므로, 메시지 길이와 WiFi 속도에
-  따라 몇 초의 지연이 있을 수 있습니다.
-- Google Cloud Text-to-Speech는 프로젝트에 결제 계정 연결이 필요할 수 있습니다(월 무료
-  사용량 있음). `GOOGLE_TTS_API_KEY`가 없거나 호출이 실패하면 해당 요청만 에러를 반환하고,
-  "기본 경고음만 보내기"와 자동 감지 경고는 영향받지 않습니다.
+- 음성 메시지는 노드가 wav를 전부 내려받은 뒤 재생을 시작하므로, 메시지 길이와 WiFi 속도에
+  따라 몇 초의 지연이 있을 수 있습니다. wav는 24kHz/16bit/mono 비압축이라 메시지가 길수록
+  파일 크기와 다운로드 시간이 늘어나니 메시지는 짧게(최대 200자 제한) 쓰는 것을 권장합니다.
+- Gemini TTS는 미리보기(preview) 모델이라 요금/쿼터/모델명이 변경될 수 있습니다.
+  `GEMINI_API_KEY`가 없거나 호출이 실패하면 해당 요청만 에러를 반환하고, "기본 경고음만
+  보내기"와 자동 감지 경고는 영향받지 않습니다.

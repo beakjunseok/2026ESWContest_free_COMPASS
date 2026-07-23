@@ -25,10 +25,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: (err as Error).message }, { status: 400 });
     }
 
-    const path = `${floorId}/${Date.now()}.mp3`;
+    const path = `${floorId}/${Date.now()}.wav`;
     const { error: uploadError } = await admin.storage
       .from("alert-audio")
-      .upload(path, audioBuffer, { contentType: "audio/mpeg" });
+      .upload(path, audioBuffer, { contentType: "audio/wav" });
 
     if (uploadError) {
       return NextResponse.json({ error: `음성 파일 업로드 실패: ${uploadError.message}` }, { status: 500 });

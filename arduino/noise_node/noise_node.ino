@@ -12,15 +12,17 @@
     1) 주기적으로 4개 센서를 샘플링해 dB 근사값으로 환산 후 Supabase(sensor_readings)에 전송
     2) 소음 발생 위치 판정과 기준 초과 여부는 Supabase 쪽 DB 트리거가 처리 (supabase/migrations 참고)
     3) 이 노드는 자기 층(FLOOR_ID) 앞으로 대기 중(pending) 경고가 있는지 주기적으로 조회한다.
-       - 경비실이 음성 메시지를 보낸 경우(audio_url 있음): mp3를 내려받아 I2S 앰프로 재생
+       - 경비실이 음성 메시지를 보낸 경우(audio_url 있음): wav를 내려받아 I2S 앰프로 재생
        - 자동 감지 등 음성이 없는 경우: 부저로 기본 경고음(삑삑삑) 재생
        재생 후 상태를 delivered로 갱신한다.
 
   필요 라이브러리 (Arduino IDE 라이브러리 매니저):
     - ArduinoJson (bblanchon)
-    - ESP8266Audio (Earle F. Philhower) — mp3 디코딩 + I2S 출력, ESP32에서도 동작
+    - ESP8266Audio (Earle F. Philhower) — wav 재생 + I2S 출력, ESP32에서도 동작
     - arduino-esp32 코어 2.x 이상 (tone()/noTone(), LittleFS 사용)
     Tools > Partition Scheme 은 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs")을 선택하세요.
+    (서버가 보내는 wav는 24kHz/16bit/mono 비압축이라 메시지가 길수록 파일이 커집니다.
+    LittleFS 여유 공간과 다운로드 시간을 고려해 메시지를 너무 길게 쓰지 않는 게 좋습니다.)
 
   배선 전 반드시 config.h를 만드세요: config.example.h를 복사해 config.h로 저장하고
   WiFi/Supabase 정보를 채워 넣습니다. config.h는 git에 커밋하지 않습니다 (.gitignore 참고).
@@ -32,7 +34,7 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include <AudioFileSourceLittleFS.h>
-#include <AudioGeneratorMP3.h>
+#include <AudioGeneratorWAV.h>
 #include <AudioOutputI2S.h>
 #include "config.h"
 
@@ -48,7 +50,7 @@ static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRC  = 27;
 static const int PIN_I2S_DOUT = 14;
 
-static const char* VOICE_MSG_PATH = "/msg.mp3";
+static const char* VOICE_MSG_PATH = "/msg.wav";
 
 // ---- 센서 dB 환산 보정값 (반드시 현장에서 소음측정기로 실측해 재보정할 것) ----
 // ADC 최소/최대값을 실제 소음계 dB 최소/최대값에 선형 매핑한 근사치입니다.
@@ -198,7 +200,7 @@ void soundAlarm() {
   noTone(PIN_SPEAKER);
 }
 
-// 경비실 음성 메시지(mp3)를 LittleFS에 통째로 내려받는다.
+// 경비실 음성 메시지(wav)를 LittleFS에 통째로 내려받는다.
 // (스트리밍 디코딩 대신 파일로 받아 재생하는 방식이 HTTPS 환경에서 훨씬 안정적이다)
 bool downloadAudioToFlash(const String &url, const char *path) {
   HTTPClient http;
@@ -245,7 +247,7 @@ bool downloadAudioToFlash(const String &url, const char *path) {
   return total > 0;
 }
 
-// 다운로드한 mp3를 I2S 앰프로 재생 (블로킹 — 재생이 끝날 때까지 대기)
+// 다운로드한 wav를 I2S 앰프로 재생 (블로킹 — 재생이 끝날 때까지 대기)
 void playVoiceMessage(const String &url) {
   Serial.printf(">>> 층간소음 경고: 경비실 음성 메시지 재생 (%s) <<<\n", url.c_str());
 
@@ -260,16 +262,16 @@ void playVoiceMessage(const String &url) {
   out.SetPinout(PIN_I2S_BCLK, PIN_I2S_LRC, PIN_I2S_DOUT);
   out.SetGain(0.9);
 
-  AudioGeneratorMP3 mp3;
-  if (!mp3.begin(&file, &out)) {
-    Serial.println("[playVoiceMessage] mp3 디코더 시작 실패, 기본 경고음으로 대체");
+  AudioGeneratorWAV wav;
+  if (!wav.begin(&file, &out)) {
+    Serial.println("[playVoiceMessage] wav 재생 시작 실패, 기본 경고음으로 대체");
     soundAlarm();
     return;
   }
 
-  while (mp3.isRunning()) {
-    if (!mp3.loop()) {
-      mp3.stop();
+  while (wav.isRunning()) {
+    if (!wav.loop()) {
+      wav.stop();
     }
   }
 
