@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import FloorCard from "@/components/FloorCard";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
@@ -14,6 +14,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const supabase = getSupabaseClient();
 
     async function loadInitial() {
       const [{ data: floorRows }, { data: readingRows }, { data: alertRows }] = await Promise.all([

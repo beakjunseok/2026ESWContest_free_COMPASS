@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 // 경비실에서 수동으로 특정 층에 스피커 경고 발령
 export async function POST(request: Request) {
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "floor_id가 필요합니다" }, { status: 400 });
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("alerts")
     .insert({ floor_id: floorId, event_id: null, status: "pending", triggered_by: "guard" })
     .select()
@@ -36,7 +36,7 @@ export async function PATCH(request: Request) {
   const patch: Record<string, unknown> = { status };
   if (status === "acknowledged") patch.acknowledged_at = new Date().toISOString();
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("alerts")
     .update(patch)
     .eq("id", id)

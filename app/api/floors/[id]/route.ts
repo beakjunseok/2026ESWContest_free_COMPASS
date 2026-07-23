@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 const EDITABLE_FIELDS = [
   "day_impact_limit_db",
@@ -27,7 +27,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "수정할 값이 없습니다" }, { status: 400 });
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("floors")
     .update(patch)
     .eq("id", floorId)

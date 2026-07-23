@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
 import ThresholdForm from "@/components/ThresholdForm";
@@ -20,6 +20,7 @@ export default function FloorDetailPage() {
   useEffect(() => {
     if (!Number.isFinite(floorId)) return;
     let cancelled = false;
+    const supabase = getSupabaseClient();
 
     async function load() {
       const [{ data: floorRow }, { data: readingRows }, { data: alertRows }] = await Promise.all([
