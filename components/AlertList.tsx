@@ -53,7 +53,7 @@ export default function AlertList({
             <div>
               <div>
                 {showFloor && <b>{a.floor_id}층 &middot; </b>}
-                {ev ? NOISE_TYPE_LABEL[ev.noise_type] : "수동 경고"}
+                {ev ? NOISE_TYPE_LABEL[ev.noise_type] : a.message ? "경비실 음성 메시지" : "경비실 기본 경고음"}
                 {ev && (
                   <span className="muted">
                     {" "}
@@ -62,6 +62,10 @@ export default function AlertList({
                   </span>
                 )}
               </div>
+              {a.message && <div style={{ marginTop: 4 }}>&ldquo;{a.message}&rdquo;</div>}
+              {a.audio_url && (
+                <audio controls src={a.audio_url} style={{ height: 32, marginTop: 4 }} />
+              )}
               <div className="muted">
                 {STATUS_LABEL[a.status]} &middot;{" "}
                 {new Date(a.created_at).toLocaleString("ko-KR")} &middot;{" "}

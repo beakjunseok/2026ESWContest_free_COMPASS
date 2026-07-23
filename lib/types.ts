@@ -33,6 +33,8 @@ export type Alert = {
   event_id: number | null;
   status: "pending" | "delivered" | "acknowledged" | "cancelled";
   triggered_by: "system" | "guard";
+  message: string | null;
+  audio_url: string | null;
   created_at: string;
   delivered_at: string | null;
   acknowledged_at: string | null;

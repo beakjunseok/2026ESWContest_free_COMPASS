@@ -11,12 +11,16 @@
   동작:
     1) 주기적으로 4개 센서를 샘플링해 dB 근사값으로 환산 후 Supabase(sensor_readings)에 전송
     2) 소음 발생 위치 판정과 기준 초과 여부는 Supabase 쪽 DB 트리거가 처리 (supabase/migrations 참고)
-    3) 이 노드는 자기 층(FLOOR_ID) 앞으로 대기 중(pending) 경고가 있는지 주기적으로 조회하고,
-       있으면 스피커로 경고음을 울린 뒤 상태를 delivered로 갱신
+    3) 이 노드는 자기 층(FLOOR_ID) 앞으로 대기 중(pending) 경고가 있는지 주기적으로 조회한다.
+       - 경비실이 음성 메시지를 보낸 경우(audio_url 있음): mp3를 내려받아 I2S 앰프로 재생
+       - 자동 감지 등 음성이 없는 경우: 부저로 기본 경고음(삑삑삑) 재생
+       재생 후 상태를 delivered로 갱신한다.
 
   필요 라이브러리 (Arduino IDE 라이브러리 매니저):
     - ArduinoJson (bblanchon)
-    - arduino-esp32 코어 2.x 이상 (tone()/noTone() 사용)
+    - ESP8266Audio (Earle F. Philhower) — mp3 디코딩 + I2S 출력, ESP32에서도 동작
+    - arduino-esp32 코어 2.x 이상 (tone()/noTone(), LittleFS 사용)
+    Tools > Partition Scheme 은 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs")을 선택하세요.
 
   배선 전 반드시 config.h를 만드세요: config.example.h를 복사해 config.h로 저장하고
   WiFi/Supabase 정보를 채워 넣습니다. config.h는 git에 커밋하지 않습니다 (.gitignore 참고).
@@ -26,6 +30,10 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <LittleFS.h>
+#include <AudioFileSourceLittleFS.h>
+#include <AudioGeneratorMP3.h>
+#include <AudioOutputI2S.h>
 #include "config.h"
 
 // ---- 핀 배치 (ESP32, ADC1 채널만 사용: WiFi 사용 중 ADC2 핀은 불안정) ----
@@ -33,7 +41,14 @@ static const int PIN_CEILING_SOUND     = 34;
 static const int PIN_CEILING_VIBRATION = 35;
 static const int PIN_FLOOR_SOUND       = 32;
 static const int PIN_FLOOR_VIBRATION   = 33;
-static const int PIN_SPEAKER           = 25;
+static const int PIN_SPEAKER           = 25; // 부저 (기본 경고음)
+
+// I2S 오디오 앰프(MAX98357A 등) — 경비실 음성 메시지 재생용
+static const int PIN_I2S_BCLK = 26;
+static const int PIN_I2S_LRC  = 27;
+static const int PIN_I2S_DOUT = 14;
+
+static const char* VOICE_MSG_PATH = "/msg.mp3";
 
 // ---- 센서 dB 환산 보정값 (반드시 현장에서 소음측정기로 실측해 재보정할 것) ----
 // ADC 최소/최대값을 실제 소음계 dB 최소/최대값에 선형 매핑한 근사치입니다.
@@ -115,12 +130,17 @@ void sendReading(float ceilingSoundDb, float ceilingVibDb, float floorSoundDb, f
   http.end();
 }
 
-// 이 층(FLOOR_ID) 앞으로 대기 중인 경고가 있는지 확인, 있으면 알림 반환
-bool fetchPendingAlert(long &alertId) {
+struct PendingAlert {
+  long alertId;
+  String audioUrl; // 비어 있으면 음성 메시지 없음 (기본 경고음 재생)
+};
+
+// 이 층(FLOOR_ID) 앞으로 대기 중인 경고가 있는지 확인, 있으면 내용 반환
+bool fetchPendingAlert(PendingAlert &alert) {
   HTTPClient http;
   String url = String(SUPABASE_URL) +
                "/rest/v1/alerts?floor_id=eq." + String(FLOOR_ID) +
-               "&status=eq.pending&order=created_at.asc&limit=1";
+               "&status=eq.pending&order=created_at.asc&limit=1&select=id,audio_url";
 
   http.begin(secureClient, url);
   http.addHeader("apikey", SUPABASE_ANON_KEY);
@@ -132,7 +152,8 @@ bool fetchPendingAlert(long &alertId) {
     String payload = http.getString();
     DynamicJsonDocument doc(1024);
     if (deserializeJson(doc, payload) == DeserializationError::Ok && doc.is<JsonArray>() && doc.size() > 0) {
-      alertId = doc[0]["id"].as<long>();
+      alert.alertId = doc[0]["id"].as<long>();
+      alert.audioUrl = doc[0]["audio_url"].isNull() ? "" : String(doc[0]["audio_url"].as<const char*>());
       found = true;
     }
   } else {
@@ -166,14 +187,93 @@ void markAlertDelivered(long alertId) {
   http.end();
 }
 
-// 경고음: 짧게 3번 삑삑삑 (스피커/부저는 PIN_SPEAKER에 트랜지스터로 구동 권장)
+// 기본 경고음: 짧게 3번 삑삑삑 (부저는 PIN_SPEAKER에 트랜지스터로 구동 권장)
+// 자동 감지 경보, 또는 음성 다운로드/재생 실패 시 대체용으로도 쓰인다.
 void soundAlarm() {
-  Serial.println(">>> 층간소음 경고: 스피커 알림 재생 <<<");
+  Serial.println(">>> 층간소음 경고: 기본 경고음 재생 <<<");
   for (int i = 0; i < 3; i++) {
     tone(PIN_SPEAKER, 2000, 250);
     delay(350);
   }
   noTone(PIN_SPEAKER);
+}
+
+// 경비실 음성 메시지(mp3)를 LittleFS에 통째로 내려받는다.
+// (스트리밍 디코딩 대신 파일로 받아 재생하는 방식이 HTTPS 환경에서 훨씬 안정적이다)
+bool downloadAudioToFlash(const String &url, const char *path) {
+  HTTPClient http;
+  http.begin(secureClient, url);
+  int code = http.GET();
+  if (code != 200) {
+    Serial.printf("[downloadAudioToFlash] 실패 code=%d\n", code);
+    http.end();
+    return false;
+  }
+
+  LittleFS.remove(path);
+  File f = LittleFS.open(path, "w");
+  if (!f) {
+    Serial.println("[downloadAudioToFlash] LittleFS 파일 열기 실패");
+    http.end();
+    return false;
+  }
+
+  int contentLength = http.getSize();
+  WiFiClient *stream = http.getStreamPtr();
+  uint8_t buf[512];
+  int total = 0;
+  unsigned long lastByteAt = millis();
+
+  while (http.connected() && (contentLength <= 0 || total < contentLength)) {
+    size_t avail = stream->available();
+    if (avail > 0) {
+      int n = stream->readBytes(buf, avail > sizeof(buf) ? sizeof(buf) : avail);
+      f.write(buf, n);
+      total += n;
+      lastByteAt = millis();
+    } else if (millis() - lastByteAt > 8000) {
+      Serial.println("[downloadAudioToFlash] 타임아웃");
+      break;
+    } else {
+      delay(5);
+    }
+  }
+
+  f.close();
+  http.end();
+  Serial.printf("[downloadAudioToFlash] %d바이트 저장 완료\n", total);
+  return total > 0;
+}
+
+// 다운로드한 mp3를 I2S 앰프로 재생 (블로킹 — 재생이 끝날 때까지 대기)
+void playVoiceMessage(const String &url) {
+  Serial.printf(">>> 층간소음 경고: 경비실 음성 메시지 재생 (%s) <<<\n", url.c_str());
+
+  if (!downloadAudioToFlash(url, VOICE_MSG_PATH)) {
+    Serial.println("[playVoiceMessage] 다운로드 실패, 기본 경고음으로 대체");
+    soundAlarm();
+    return;
+  }
+
+  AudioFileSourceLittleFS file(VOICE_MSG_PATH);
+  AudioOutputI2S out;
+  out.SetPinout(PIN_I2S_BCLK, PIN_I2S_LRC, PIN_I2S_DOUT);
+  out.SetGain(0.9);
+
+  AudioGeneratorMP3 mp3;
+  if (!mp3.begin(&file, &out)) {
+    Serial.println("[playVoiceMessage] mp3 디코더 시작 실패, 기본 경고음으로 대체");
+    soundAlarm();
+    return;
+  }
+
+  while (mp3.isRunning()) {
+    if (!mp3.loop()) {
+      mp3.stop();
+    }
+  }
+
+  LittleFS.remove(VOICE_MSG_PATH);
 }
 
 void setup() {
@@ -182,6 +282,10 @@ void setup() {
 
   pinMode(PIN_SPEAKER, OUTPUT);
   analogReadResolution(12);
+
+  if (!LittleFS.begin(true)) {
+    Serial.println("LittleFS 마운트 실패");
+  }
 
   connectWiFi();
   secureClient.setInsecure(); // 데모용: 인증서 검증 생략. 운영 시 루트 CA 고정을 권장
@@ -214,10 +318,14 @@ void loop() {
   if (now - lastPollAt >= POLL_INTERVAL_MS) {
     lastPollAt = now;
 
-    long alertId;
-    if (fetchPendingAlert(alertId)) {
-      soundAlarm();
-      markAlertDelivered(alertId);
+    PendingAlert alert;
+    if (fetchPendingAlert(alert)) {
+      if (alert.audioUrl.length() > 0) {
+        playVoiceMessage(alert.audioUrl);
+      } else {
+        soundAlarm();
+      }
+      markAlertDelivered(alert.alertId);
     }
   }
 }

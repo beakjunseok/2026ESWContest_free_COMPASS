@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
+import SendMessageForm from "@/components/SendMessageForm";
 
 export default function FloorDetailPage() {
   const params = useParams<{ id: string }>();
@@ -14,7 +15,6 @@ export default function FloorDetailPage() {
   const [floor, setFloor] = useState<Floor | null>(null);
   const [readings, setReadings] = useState<SensorReading[]>([]);
   const [alerts, setAlerts] = useState<AlertWithEvent[]>([]);
-  const [triggering, setTriggering] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(floorId)) return;
@@ -76,19 +76,6 @@ export default function FloorDetailPage() {
     };
   }, [floorId]);
 
-  async function triggerManualAlert() {
-    setTriggering(true);
-    try {
-      await fetch("/api/alerts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ floor_id: floorId }),
-      });
-    } finally {
-      setTriggering(false);
-    }
-  }
-
   if (!floor) {
     return <p className="muted">불러오는 중...</p>;
   }
@@ -102,19 +89,7 @@ export default function FloorDetailPage() {
         {floor.label} 상세
       </h1>
 
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 className="floor-title" style={{ margin: 0 }}>
-            수동 스피커 경고
-          </h3>
-          <button className="btn danger" onClick={triggerManualAlert} disabled={triggering}>
-            {triggering ? "발령 중..." : "이 층에 경고 발령"}
-          </button>
-        </div>
-        <p className="muted" style={{ marginTop: 8 }}>
-          자동 감지와 무관하게 경비실에서 직접 스피커 경고를 보낼 수 있습니다.
-        </p>
-      </div>
+      <SendMessageForm floorId={floorId} />
 
       <h2 className="section-title">최근 센서 데이터</h2>
       {readings.length === 0 ? (

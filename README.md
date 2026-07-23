@@ -45,9 +45,12 @@ components/ 대시보드 UI 컴포넌트
 ### 1-3. 경고 전달
 
 - ESP32 노드는 3초마다 `alerts` 테이블에서 **자기 층 앞으로 온 pending 경고**를 조회합니다.
-- 경고가 있으면 스피커(부저)로 3회 경고음을 재생하고 상태를 `delivered`로 갱신합니다.
-- 경비실은 대시보드에서 언제든 특정 층에 수동으로 경고를 보내거나, 경고를 "확인 완료" 처리할
-  수 있습니다.
+- 자동 감지 경고(음성 메시지 없음)는 부저로 3회 경고음(삑삑삑)을 재생합니다.
+- 경비실이 층 상세 페이지에서 문구를 선택하거나 직접 입력해 보낸 경고는 서버가 TTS로 음성을
+  합성해 Supabase Storage에 올리고, ESP32가 그 mp3를 내려받아 I2S 스피커로 재생합니다
+  (자세한 내용은 "1-5. 음성 경고 메시지" 참고).
+- 재생 후 상태를 `delivered`로 갱신하며, 경비실은 대시보드에서 경고를 "확인 완료" 처리할 수
+  있습니다.
 
 ### 1-4. 법정 기준값 (모든 층 공통, 고정값 — 조정 불가)
 
@@ -72,11 +75,25 @@ components/ 대시보드 UI 컴포넌트
 학습·시연 목적의 근사 구현이며, 실제 민원/제재 근거로 쓰려면 정식 소음측정기와
 인증된 절차를 따라야 합니다.
 
+### 1-5. 음성 경고 메시지 (경비실 → 특정 층 스피커)
+
+경비실은 층 상세 페이지(`/floors/[id]`)에서 미리 정해둔 문구를 고르거나 직접 문장을 입력해
+해당 층 스피커로 실제 음성 메시지를 보낼 수 있습니다.
+
+1. 경비실이 문구 선택/입력 후 전송 → `/api/alerts`(POST)가 텍스트를 받는다
+2. 서버가 Google Cloud Text-to-Speech로 mp3를 합성해 Supabase Storage(`alert-audio`
+   버킷)에 업로드하고, `alerts.message`(원문 텍스트)와 `alerts.audio_url`(공개 mp3 URL)을
+   저장한다
+3. 해당 층 ESP32 노드가 폴링 중 이 경고를 발견하면 mp3를 LittleFS에 내려받아 I2S 앰프로
+   재생한다 (다운로드/디코딩 실패 시 기본 부저 경고음으로 자동 대체)
+4. 메시지 없이 "기본 경고음만 보내기"를 선택하면 기존과 동일하게 부저 알림만 울린다
+
 ## 2. 하드웨어 (arduino/noise_node)
 
 - 보드: ESP32 (WiFi 내장)
 - 센서: 소리센서 2개(KY-038 등), 진동센서 2개(SW-420 등)
-- 출력: 패시브 부저/스피커 (트랜지스터로 구동 권장)
+- 출력 1 — 부저: 패시브 부저/스피커 (트랜지스터로 구동 권장). 자동 감지 시 기본 경고음.
+- 출력 2 — I2S 오디오 앰프(예: MAX98357A) + 소형 스피커. 경비실이 보낸 음성 메시지 재생용.
 
 핀 배치 (ADC1 채널만 사용 — WiFi 사용 중 ADC2 핀은 불안정):
 
@@ -86,14 +103,20 @@ components/ 대시보드 UI 컴포넌트
 | 천장 진동센서 | GPIO35 |
 | 바닥 소리센서 | GPIO32 |
 | 바닥 진동센서 | GPIO33 |
-| 스피커/부저 | GPIO25 |
+| 부저(기본 경고음) | GPIO25 |
+| I2S BCLK (MAX98357A) | GPIO26 |
+| I2S LRC (MAX98357A) | GPIO27 |
+| I2S DIN (MAX98357A) | GPIO14 |
 
 ### 설정
 
-1. Arduino IDE에 ESP32 보드 패키지, `ArduinoJson` 라이브러리 설치
-2. `arduino/noise_node/config.example.h`를 같은 폴더에 `config.h`로 복사
-3. `config.h`에 WiFi 정보, Supabase URL/anon key, `FLOOR_ID`(이 노드가 담당하는 층) 입력
-4. 층마다 `FLOOR_ID`만 바꿔서 각 노드에 업로드
+1. Arduino IDE에 ESP32 보드 패키지 설치, 라이브러리 매니저에서 `ArduinoJson`,
+   `ESP8266Audio`(Earle F. Philhower) 설치
+2. Tools → Partition Scheme에서 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs") 선택
+   — 다운로드한 음성 mp3를 임시로 저장하는 데 사용됩니다
+3. `arduino/noise_node/config.example.h`를 같은 폴더에 `config.h`로 복사
+4. `config.h`에 WiFi 정보, Supabase URL/anon key, `FLOOR_ID`(이 노드가 담당하는 층) 입력
+5. 층마다 `FLOOR_ID`만 바꿔서 각 노드에 업로드
 
 ### 캘리브레이션 (중요)
 
@@ -110,6 +133,8 @@ components/ 대시보드 UI 컴포넌트
      (필요 시 층 수 조정: `floors` 테이블에 행 추가/삭제)
    - `0002_lock_legal_thresholds.sql` — 층별 소음 기준 컬럼 제거 + 법정 고정값(Lmax
      57/52dB, 공기전달 45/40dB)을 트리거에 상수로 반영 + 층별 기준 수정 권한 제거
+   - `0003_alert_messages.sql` — `alerts`에 `message`/`audio_url` 컬럼 추가, 음성 파일을
+     저장할 공개 Storage 버킷(`alert-audio`) 생성
 3. Project Settings → API 에서 `Project URL`, `anon public key`, `service_role key` 확인
 
 > **보안 참고**: 이 스키마는 시연/교육용으로 anon key에 `sensor_readings` INSERT,
@@ -136,13 +161,16 @@ npm run dev
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (서버 전용, `NEXT_PUBLIC_` 접두사 없음에 주의)
+   - `GOOGLE_TTS_API_KEY` (Google Cloud Console에서 Text-to-Speech API를 활성화하고 발급한 키.
+     경비실 음성 메시지 기능에만 사용되며, 없어도 빌드/기본 경고음 기능은 정상 동작한다)
 3. Deploy
 
 ### 화면 구성
 
 - `/` : 전체 층 카드 그리드 (실시간 소음 레벨, 정상/경고 상태), 미해결 경고 목록
-- `/floors/[id]` : 층별 최근 센서 데이터, 경고 이력, 수동 경고 발령 버튼, 적용 중인 법정 기준 표시
-  (읽기 전용 — 모든 층 공통, 변경 불가)
+- `/floors/[id]` : 층별 최근 센서 데이터, 경고 이력(전송된 메시지/음성 재생 포함), 프리셋 선택
+  또는 직접 입력으로 음성 경고 메시지 보내기, 적용 중인 법정 기준 표시(읽기 전용 — 모든 층
+  공통, 변경 불가)
 
 ## 5. 한계 / 개선 여지
 
@@ -151,3 +179,8 @@ npm run dev
   운영 환경에서는 루트 CA 고정을 권장합니다.
 - 경고 폴링 주기(3초)로 인해 최대 수 초의 지연이 있을 수 있습니다. 지연을 더 줄이려면
   ESP32에서 Supabase Realtime(WebSocket) 구독으로 전환할 수 있습니다.
+- 음성 메시지는 노드가 mp3를 전부 내려받은 뒤 재생을 시작하므로, 메시지 길이와 WiFi 속도에
+  따라 몇 초의 지연이 있을 수 있습니다.
+- Google Cloud Text-to-Speech는 프로젝트에 결제 계정 연결이 필요할 수 있습니다(월 무료
+  사용량 있음). `GOOGLE_TTS_API_KEY`가 없거나 호출이 실패하면 해당 요청만 에러를 반환하고,
+  "기본 경고음만 보내기"와 자동 감지 경고는 영향받지 않습니다.
