@@ -6,7 +6,6 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
-import ThresholdForm from "@/components/ThresholdForm";
 
 export default function FloorDetailPage() {
   const params = useParams<{ id: string }>();
@@ -148,7 +147,34 @@ export default function FloorDetailPage() {
       <h2 className="section-title">경고 이력</h2>
       <AlertList alerts={alerts} showFloor={false} />
 
-      <ThresholdForm floor={floor} />
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3 className="floor-title">적용 중인 소음 기준 (법정 고정값)</h3>
+        <p className="muted">
+          모든 층에 동일하게 적용되며 조정할 수 없습니다. (국가법령정보 생활법령 &middot;
+          층간소음의 기준)
+        </p>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>주간(06~22시)</th>
+              <th>야간(22~06시)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>충격소음 (최고소음도 기준 판정)</td>
+              <td>57 dB</td>
+              <td>52 dB</td>
+            </tr>
+            <tr>
+              <td>공기전달소음 (5분 등가소음도 기준)</td>
+              <td>45 dB</td>
+              <td>40 dB</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

@@ -1,10 +1,6 @@
 export type Floor = {
   id: number;
   label: string;
-  day_impact_limit_db: number;
-  night_impact_limit_db: number;
-  day_airborne_limit_db: number;
-  night_airborne_limit_db: number;
   created_at: string;
 };
 
