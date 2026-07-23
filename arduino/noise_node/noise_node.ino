@@ -1,0 +1,223 @@
+/*
+  noise_node.ino
+  아파트 층간소음 감지 노드 (ESP32) — 층마다 한 대씩 설치
+
+  센서 4개 (천장 2개 + 바닥 2개):
+    - 천장 소리센서 (KY-038 등)   : 윗집과 맞닿은 슬라브 쪽, 공기전달음 감지
+    - 천장 진동센서 (SW-420 등)   : 윗집과 맞닿은 슬라브 쪽, 충격 감지
+    - 바닥 소리센서               : 아랫집과 맞닿은 슬라브 쪽 (=이 집 바닥), 자기 집 소음 감지
+    - 바닥 진동센서               : 아랫집과 맞닿은 슬라브 쪽 (=이 집 바닥), 자기 집 충격 감지
+
+  동작:
+    1) 주기적으로 4개 센서를 샘플링해 dB 근사값으로 환산 후 Supabase(sensor_readings)에 전송
+    2) 소음 발생 위치 판정과 기준 초과 여부는 Supabase 쪽 DB 트리거가 처리 (supabase/migrations 참고)
+    3) 이 노드는 자기 층(FLOOR_ID) 앞으로 대기 중(pending) 경고가 있는지 주기적으로 조회하고,
+       있으면 스피커로 경고음을 울린 뒤 상태를 delivered로 갱신
+
+  필요 라이브러리 (Arduino IDE 라이브러리 매니저):
+    - ArduinoJson (bblanchon)
+    - arduino-esp32 코어 2.x 이상 (tone()/noTone() 사용)
+
+  배선 전 반드시 config.h를 만드세요: config.example.h를 복사해 config.h로 저장하고
+  WiFi/Supabase 정보를 채워 넣습니다. config.h는 git에 커밋하지 않습니다 (.gitignore 참고).
+*/
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include "config.h"
+
+// ---- 핀 배치 (ESP32, ADC1 채널만 사용: WiFi 사용 중 ADC2 핀은 불안정) ----
+static const int PIN_CEILING_SOUND     = 34;
+static const int PIN_CEILING_VIBRATION = 35;
+static const int PIN_FLOOR_SOUND       = 32;
+static const int PIN_FLOOR_VIBRATION   = 33;
+static const int PIN_SPEAKER           = 25;
+
+// ---- 센서 dB 환산 보정값 (반드시 현장에서 소음측정기로 실측해 재보정할 것) ----
+// ADC 최소/최대값을 실제 소음계 dB 최소/최대값에 선형 매핑한 근사치입니다.
+static const int    ADC_MAX_VALUE   = 4095; // ESP32 ADC 12bit
+static const float  SOUND_DB_MIN    = 30.0;  // ADC=0 근방일 때의 근사 dB
+static const float  SOUND_DB_MAX    = 100.0; // ADC=4095 근방일 때의 근사 dB
+static const float  VIB_DB_MIN      = 25.0;
+static const float  VIB_DB_MAX      = 90.0;
+
+static const unsigned long SEND_INTERVAL_MS  = 2000; // 센서값 전송 주기
+static const unsigned long POLL_INTERVAL_MS  = 3000; // 경고 대기열 조회 주기
+static const int    SAMPLE_WINDOW_MS         = 300;   // 한 번 측정 시 피크를 잡기 위한 샘플링 창
+
+unsigned long lastSendAt = 0;
+unsigned long lastPollAt = 0;
+
+WiFiClientSecure secureClient;
+
+float adcToDb(int adcPeak, float dbMin, float dbMax) {
+  float ratio = constrain((float)adcPeak / (float)ADC_MAX_VALUE, 0.0, 1.0);
+  return dbMin + ratio * (dbMax - dbMin);
+}
+
+// 짧은 구간 동안 반복 샘플링해 피크값을 잡는다 (순간 충격/소리를 놓치지 않기 위함)
+int samplePeak(int pin) {
+  unsigned long start = millis();
+  int peak = 0;
+  while (millis() - start < SAMPLE_WINDOW_MS) {
+    int v = analogRead(pin);
+    if (v > peak) peak = v;
+    delayMicroseconds(500);
+  }
+  return peak;
+}
+
+void connectWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.printf("WiFi 연결 중: %s", WIFI_SSID);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(400);
+    Serial.print(".");
+  }
+  Serial.printf("\nWiFi 연결됨. IP=%s\n", WiFi.localIP().toString().c_str());
+}
+
+void ensureWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi 끊김, 재연결 시도");
+    connectWiFi();
+  }
+}
+
+// Supabase REST에 센서 측정값 한 건을 INSERT
+void sendReading(float ceilingSoundDb, float ceilingVibDb, float floorSoundDb, float floorVibDb) {
+  HTTPClient http;
+  String url = String(SUPABASE_URL) + "/rest/v1/sensor_readings";
+
+  http.begin(secureClient, url);
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Prefer", "return=minimal");
+
+  StaticJsonDocument<256> doc;
+  doc["floor_id"] = FLOOR_ID;
+  doc["ceiling_sound_db"] = ceilingSoundDb;
+  doc["ceiling_vibration"] = ceilingVibDb;
+  doc["floor_sound_db"] = floorSoundDb;
+  doc["floor_vibration"] = floorVibDb;
+
+  String body;
+  serializeJson(doc, body);
+
+  int code = http.POST(body);
+  if (code <= 0 || code >= 300) {
+    Serial.printf("[sendReading] 실패 code=%d resp=%s\n", code, http.getString().c_str());
+  }
+  http.end();
+}
+
+// 이 층(FLOOR_ID) 앞으로 대기 중인 경고가 있는지 확인, 있으면 알림 반환
+bool fetchPendingAlert(long &alertId) {
+  HTTPClient http;
+  String url = String(SUPABASE_URL) +
+               "/rest/v1/alerts?floor_id=eq." + String(FLOOR_ID) +
+               "&status=eq.pending&order=created_at.asc&limit=1";
+
+  http.begin(secureClient, url);
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+
+  int code = http.GET();
+  bool found = false;
+  if (code == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument doc(1024);
+    if (deserializeJson(doc, payload) == DeserializationError::Ok && doc.is<JsonArray>() && doc.size() > 0) {
+      alertId = doc[0]["id"].as<long>();
+      found = true;
+    }
+  } else {
+    Serial.printf("[fetchPendingAlert] 실패 code=%d\n", code);
+  }
+  http.end();
+  return found;
+}
+
+// 경고 상태를 delivered로 갱신
+void markAlertDelivered(long alertId) {
+  HTTPClient http;
+  String url = String(SUPABASE_URL) + "/rest/v1/alerts?id=eq." + String(alertId);
+
+  http.begin(secureClient, url);
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Prefer", "return=minimal");
+
+  // delivered_at은 DB 쪽 default now()로 채우도록 두고 status만 갱신한다
+  StaticJsonDocument<64> doc;
+  doc["status"] = "delivered";
+  String body;
+  serializeJson(doc, body);
+
+  int code = http.sendRequest("PATCH", body);
+  if (code <= 0 || code >= 300) {
+    Serial.printf("[markAlertDelivered] 실패 code=%d\n", code);
+  }
+  http.end();
+}
+
+// 경고음: 짧게 3번 삑삑삑 (스피커/부저는 PIN_SPEAKER에 트랜지스터로 구동 권장)
+void soundAlarm() {
+  Serial.println(">>> 층간소음 경고: 스피커 알림 재생 <<<");
+  for (int i = 0; i < 3; i++) {
+    tone(PIN_SPEAKER, 2000, 250);
+    delay(350);
+  }
+  noTone(PIN_SPEAKER);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(300);
+
+  pinMode(PIN_SPEAKER, OUTPUT);
+  analogReadResolution(12);
+
+  connectWiFi();
+  secureClient.setInsecure(); // 데모용: 인증서 검증 생략. 운영 시 루트 CA 고정을 권장
+}
+
+void loop() {
+  ensureWiFi();
+
+  unsigned long now = millis();
+
+  if (now - lastSendAt >= SEND_INTERVAL_MS) {
+    lastSendAt = now;
+
+    int ceilingSoundAdc = samplePeak(PIN_CEILING_SOUND);
+    int ceilingVibAdc   = samplePeak(PIN_CEILING_VIBRATION);
+    int floorSoundAdc   = samplePeak(PIN_FLOOR_SOUND);
+    int floorVibAdc     = samplePeak(PIN_FLOOR_VIBRATION);
+
+    float ceilingSoundDb = adcToDb(ceilingSoundAdc, SOUND_DB_MIN, SOUND_DB_MAX);
+    float ceilingVibDb   = adcToDb(ceilingVibAdc, VIB_DB_MIN, VIB_DB_MAX);
+    float floorSoundDb   = adcToDb(floorSoundAdc, SOUND_DB_MIN, SOUND_DB_MAX);
+    float floorVibDb     = adcToDb(floorVibAdc, VIB_DB_MIN, VIB_DB_MAX);
+
+    Serial.printf("[층 %d] 천장(소리=%.1fdB 진동=%.1fdB) 바닥(소리=%.1fdB 진동=%.1fdB)\n",
+                  FLOOR_ID, ceilingSoundDb, ceilingVibDb, floorSoundDb, floorVibDb);
+
+    sendReading(ceilingSoundDb, ceilingVibDb, floorSoundDb, floorVibDb);
+  }
+
+  if (now - lastPollAt >= POLL_INTERVAL_MS) {
+    lastPollAt = now;
+
+    long alertId;
+    if (fetchPendingAlert(alertId)) {
+      soundAlarm();
+      markAlertDelivered(alertId);
+    }
+  }
+}

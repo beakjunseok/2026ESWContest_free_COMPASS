@@ -1,0 +1,17 @@
+# Next.js / Node
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env*.local
+npm-debug.log*
+.vercel
+
+# Arduino secrets
+arduino/**/config.h
+
+# OS
+.DS_Store
+Thumbs.db
