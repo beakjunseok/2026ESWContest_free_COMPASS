@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 const PRESET_MESSAGES = [
   "층간소음이 발생하고 있습니다. 주의를 부탁드립니다.",
@@ -10,11 +11,41 @@ const PRESET_MESSAGES = [
   "늦은 시간 발걸음 소리, 뛰는 소리에 주의해 주시기 바랍니다.",
 ];
 
+const HISTORY_LIMIT = 10;
+
 export default function SendMessageForm({ floorId }: { floorId: number }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
+
+  async function loadHistory() {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from("alerts")
+      .select("message")
+      .eq("triggered_by", "guard")
+      .not("message", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    const seen = new Set(PRESET_MESSAGES);
+    const list: string[] = [];
+    for (const row of (data as { message: string | null }[] | null) ?? []) {
+      const msg = row.message;
+      if (msg && !seen.has(msg)) {
+        seen.add(msg);
+        list.push(msg);
+      }
+      if (list.length >= HISTORY_LIMIT) break;
+    }
+    setHistory(list);
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   async function send(message: string) {
     setSending(true);
@@ -31,6 +62,7 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
       }
       setSentAt(Date.now());
       setText("");
+      if (message) loadHistory();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -61,6 +93,27 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
           </button>
         ))}
       </div>
+
+      {history.length > 0 && (
+        <>
+          <p className="muted" style={{ marginTop: 4, marginBottom: 4 }}>
+            최근 보낸 메시지
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            {history.map((msg) => (
+              <button
+                key={msg}
+                type="button"
+                className="btn"
+                onClick={() => setText(msg)}
+                disabled={sending}
+              >
+                {msg}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <textarea
         value={text}
