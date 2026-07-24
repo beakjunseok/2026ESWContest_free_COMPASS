@@ -45,7 +45,7 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
       </h3>
       <p className="muted" style={{ marginTop: 8 }}>
         아래 문구를 선택하거나 직접 입력해 이 층 스피커로 음성 메시지를 보낼 수 있습니다. 빈
-        메시지로 보내면 기본 경고음만 재생됩니다.
+        메시지로 보내면 이 노드에 미리 등록해둔 고정 경고 음성이 재생됩니다.
       </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0" }}>
@@ -94,7 +94,7 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
           disabled={sending}
           onClick={() => send("")}
         >
-          기본 경고음만 보내기
+          정해진 경고 음성 보내기
         </button>
         {sentAt && !sending && !error && <span className="muted">전송 완료</span>}
       </div>

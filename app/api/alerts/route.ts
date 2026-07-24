@@ -4,7 +4,8 @@ import { synthesizeSpeech } from "@/lib/tts";
 
 // 경비실에서 수동으로 특정 층에 스피커 경고 발령.
 // message가 있으면 TTS로 변환해 Storage에 올리고 audio_url을 함께 저장한다.
-// message가 없으면(=빈 문자열/미전달) 기존과 동일하게 기본 경고음만 재생되는 알림을 만든다.
+// message가 없으면(=빈 문자열/미전달) audio_url도 null로 저장되며, ESP32가 이를 보고
+// config.h에 지정된 DEFAULT_ALERT_URL(고정 경고 음성)을 대신 재생한다.
 export async function POST(request: Request) {
   const body = await request.json();
   const floorId = Number(body.floor_id);

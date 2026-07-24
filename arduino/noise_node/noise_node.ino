@@ -12,17 +12,22 @@
     1) 주기적으로 4개 센서를 샘플링해 dB 근사값으로 환산 후 Supabase(sensor_readings)에 전송
     2) 소음 발생 위치 판정과 기준 초과 여부는 Supabase 쪽 DB 트리거가 처리 (supabase/migrations 참고)
     3) 이 노드는 자기 층(FLOOR_ID) 앞으로 대기 중(pending) 경고가 있는지 주기적으로 조회한다.
-       - 경비실이 음성 메시지를 보낸 경우(audio_url 있음): wav를 내려받아 I2S 앰프로 재생
-       - 자동 감지 등 음성이 없는 경우: 부저로 기본 경고음(삑삑삑) 재생
-       재생 후 상태를 delivered로 갱신한다.
+       - 경비실이 직접 쓴 음성 메시지가 있으면(audio_url 있음) 그 wav를 재생
+       - 자동 감지 경보, 또는 경비실이 "정해진 경고 음성 보내기"를 누른 경우(audio_url 없음)는
+         config.h의 DEFAULT_ALERT_URL(고정 경고 음성)을 재생
+       모든 경고가 부저 삑삑 소리가 아니라 실제 음성으로 재생된다. 재생 후 상태를 delivered로
+       갱신한다.
 
   필요 라이브러리 (Arduino IDE 라이브러리 매니저):
     - ArduinoJson (bblanchon)
     - ESP8266Audio (Earle F. Philhower) — wav 재생 + I2S 출력, ESP32에서도 동작
-    - arduino-esp32 코어 2.x 이상 (tone()/noTone(), LittleFS 사용)
+    - arduino-esp32 코어 2.x 이상 (LittleFS 사용)
     Tools > Partition Scheme 은 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs")을 선택하세요.
     (서버가 보내는 wav는 24kHz/16bit/mono 비압축이라 메시지가 길수록 파일이 커집니다.
     LittleFS 여유 공간과 다운로드 시간을 고려해 메시지를 너무 길게 쓰지 않는 게 좋습니다.)
+
+  주의: 부저를 쓰지 않으므로 모든 경고 재생은 WiFi로 wav를 내려받아야 합니다. 네트워크가
+  끊긴 순간에는 경고음 자체가 나오지 않습니다 (README 한계 항목 참고).
 
   배선 전 반드시 config.h를 만드세요: config.example.h를 복사해 config.h로 저장하고
   WiFi/Supabase 정보를 채워 넣습니다. config.h는 git에 커밋하지 않습니다 (.gitignore 참고).
@@ -43,9 +48,8 @@ static const int PIN_CEILING_SOUND     = 34;
 static const int PIN_CEILING_VIBRATION = 35;
 static const int PIN_FLOOR_SOUND       = 32;
 static const int PIN_FLOOR_VIBRATION   = 33;
-static const int PIN_SPEAKER           = 25; // 부저 (기본 경고음)
 
-// I2S 오디오 앰프(MAX98357A 등) — 경비실 음성 메시지 재생용
+// I2S 오디오 앰프(MAX98357A 등) — 모든 경고 음성 재생용
 static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRC  = 27;
 static const int PIN_I2S_DOUT = 14;
@@ -134,7 +138,7 @@ void sendReading(float ceilingSoundDb, float ceilingVibDb, float floorSoundDb, f
 
 struct PendingAlert {
   long alertId;
-  String audioUrl; // 비어 있으면 음성 메시지 없음 (기본 경고음 재생)
+  String audioUrl; // 비어 있으면 경비실이 직접 쓴 메시지가 없음 (DEFAULT_ALERT_URL 재생)
 };
 
 // 이 층(FLOOR_ID) 앞으로 대기 중인 경고가 있는지 확인, 있으면 내용 반환
@@ -189,18 +193,7 @@ void markAlertDelivered(long alertId) {
   http.end();
 }
 
-// 기본 경고음: 짧게 3번 삑삑삑 (부저는 PIN_SPEAKER에 트랜지스터로 구동 권장)
-// 자동 감지 경보, 또는 음성 다운로드/재생 실패 시 대체용으로도 쓰인다.
-void soundAlarm() {
-  Serial.println(">>> 층간소음 경고: 기본 경고음 재생 <<<");
-  for (int i = 0; i < 3; i++) {
-    tone(PIN_SPEAKER, 2000, 250);
-    delay(350);
-  }
-  noTone(PIN_SPEAKER);
-}
-
-// 경비실 음성 메시지(wav)를 LittleFS에 통째로 내려받는다.
+// 재생할 음성(wav)을 LittleFS에 통째로 내려받는다.
 // (스트리밍 디코딩 대신 파일로 받아 재생하는 방식이 HTTPS 환경에서 훨씬 안정적이다)
 bool downloadAudioToFlash(const String &url, const char *path) {
   HTTPClient http;
@@ -247,13 +240,12 @@ bool downloadAudioToFlash(const String &url, const char *path) {
   return total > 0;
 }
 
-// 다운로드한 wav를 I2S 앰프로 재생 (블로킹 — 재생이 끝날 때까지 대기)
+// url의 wav를 내려받아 I2S 앰프로 재생 (블로킹 — 재생이 끝날 때까지 대기)
 void playVoiceMessage(const String &url) {
-  Serial.printf(">>> 층간소음 경고: 경비실 음성 메시지 재생 (%s) <<<\n", url.c_str());
+  Serial.printf(">>> 층간소음 경고: 음성 재생 (%s) <<<\n", url.c_str());
 
   if (!downloadAudioToFlash(url, VOICE_MSG_PATH)) {
-    Serial.println("[playVoiceMessage] 다운로드 실패, 기본 경고음으로 대체");
-    soundAlarm();
+    Serial.println("[playVoiceMessage] 다운로드 실패, 이번 경고는 재생하지 못함");
     return;
   }
 
@@ -264,8 +256,8 @@ void playVoiceMessage(const String &url) {
 
   AudioGeneratorWAV wav;
   if (!wav.begin(&file, &out)) {
-    Serial.println("[playVoiceMessage] wav 재생 시작 실패, 기본 경고음으로 대체");
-    soundAlarm();
+    Serial.println("[playVoiceMessage] wav 재생 시작 실패");
+    LittleFS.remove(VOICE_MSG_PATH);
     return;
   }
 
@@ -282,7 +274,6 @@ void setup() {
   Serial.begin(115200);
   delay(300);
 
-  pinMode(PIN_SPEAKER, OUTPUT);
   analogReadResolution(12);
 
   if (!LittleFS.begin(true)) {
@@ -322,11 +313,8 @@ void loop() {
 
     PendingAlert alert;
     if (fetchPendingAlert(alert)) {
-      if (alert.audioUrl.length() > 0) {
-        playVoiceMessage(alert.audioUrl);
-      } else {
-        soundAlarm();
-      }
+      String urlToPlay = alert.audioUrl.length() > 0 ? alert.audioUrl : String(DEFAULT_ALERT_URL);
+      playVoiceMessage(urlToPlay);
       markAlertDelivered(alert.alertId);
     }
   }

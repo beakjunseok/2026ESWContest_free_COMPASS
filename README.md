@@ -45,10 +45,12 @@ components/ 대시보드 UI 컴포넌트
 ### 1-3. 경고 전달
 
 - ESP32 노드는 3초마다 `alerts` 테이블에서 **자기 층 앞으로 온 pending 경고**를 조회합니다.
-- 자동 감지 경고(음성 메시지 없음)는 부저로 3회 경고음(삑삑삑)을 재생합니다.
-- 경비실이 층 상세 페이지에서 문구를 선택하거나 직접 입력해 보낸 경고는 서버가 TTS로 음성을
-  합성해 Supabase Storage에 올리고, ESP32가 그 wav를 내려받아 I2S 스피커로 재생합니다
-  (자세한 내용은 "1-5. 음성 경고 메시지" 참고).
+- 부저 없이 **모든 경고를 I2S 스피커의 실제 음성으로** 재생합니다.
+  - 경비실이 문구를 선택/입력해 보낸 경고는 서버가 TTS로 음성을 합성해 Supabase Storage에
+    올리고, ESP32가 그 wav를 내려받아 재생합니다.
+  - 자동 감지 경고나 "정해진 경고 음성 보내기"처럼 별도 메시지가 없는 경우에는 미리 준비해
+    둔 고정 wav(`config.h`의 `DEFAULT_ALERT_URL`)를 재생합니다.
+  - (자세한 내용은 "1-5. 음성 경고 메시지" 참고)
 - 재생 후 상태를 `delivered`로 갱신하며, 경비실은 대시보드에서 경고를 "확인 완료" 처리할 수
   있습니다.
 
@@ -86,19 +88,37 @@ components/ 대시보드 UI 컴포넌트
    Storage(`alert-audio` 버킷)에 업로드하고, `alerts.message`(원문 텍스트)와
    `alerts.audio_url`(공개 wav URL)을 저장한다
 3. 해당 층 ESP32 노드가 폴링 중 이 경고를 발견하면 wav를 LittleFS에 내려받아 I2S 앰프로
-   재생한다 (다운로드/재생 실패 시 기본 부저 경고음으로 자동 대체)
-4. 메시지 없이 "기본 경고음만 보내기"를 선택하면 기존과 동일하게 부저 알림만 울린다
+   재생한다
+4. 메시지 없이 "정해진 경고 음성 보내기"를 선택하면 `audio_url`이 비어 있는 채로 저장되고,
+   ESP32는 그 경우 `config.h`의 `DEFAULT_ALERT_URL`(고정 경고 음성)을 대신 재생한다.
+   자동 감지 경고(시스템이 만든 경고)도 항상 `audio_url`이 비어 있으므로 동일하게
+   `DEFAULT_ALERT_URL`이 재생된다
 
 > Google Cloud Text-to-Speech(`texttospeech.googleapis.com`)와 Gemini API는 서로 다른
 > 제품입니다. Google AI Studio에서 발급한 Gemini API 키는 Cloud TTS에는 쓸 수 없지만,
 > Gemini 모델 자체의 음성 합성 기능(위 방식)에는 그대로 사용할 수 있습니다.
 
+#### 고정 경고 음성(DEFAULT_ALERT_URL) 준비하기
+
+부저를 쓰지 않기로 했으므로, 자동 감지 경고에도 재생할 wav 파일을 미리 하나 만들어 둬야
+합니다. 새 서버 코드를 짤 필요 없이 이미 만든 기능으로 바로 만들 수 있습니다.
+
+1. 배포된 대시보드에서 아무 층 상세 페이지에 들어가 원하는 고정 문구(예: "층간소음 기준을
+   초과하는 소음이 감지되었습니다. 주의해 주시기 바랍니다.")를 입력해 전송
+2. 경고 이력에 뜬 `<audio>` 재생 버튼을 우클릭 → "오디오 주소 복사"(브라우저마다 문구가
+   다를 수 있음) 로 wav 공개 URL을 복사 (또는 새 탭에서 열어 주소창의 URL 확인)
+3. 그 URL을 모든 노드의 `config.h`에 있는 `DEFAULT_ALERT_URL`에 붙여넣기 (여러 노드가
+   같은 URL을 공유해도 됩니다)
+
+이 파일은 Supabase Storage(`alert-audio` 버킷)에 이미 영구 저장되어 있으므로 한 번만
+만들면 계속 재사용됩니다.
+
 ## 2. 하드웨어 (arduino/noise_node)
 
 - 보드: ESP32 (WiFi 내장)
 - 센서: 소리센서 2개(KY-038 등), 진동센서 2개(SW-420 등)
-- 출력 1 — 부저: 패시브 부저/스피커 (트랜지스터로 구동 권장). 자동 감지 시 기본 경고음.
-- 출력 2 — I2S 오디오 앰프(예: MAX98357A) + 소형 스피커. 경비실이 보낸 음성 메시지 재생용.
+- 출력: I2S 오디오 앰프(예: MAX98357A) + 소형 스피커 1조. 자동 감지 경고와 경비실 음성
+  메시지 모두 이 스피커 하나로 재생됩니다 (별도 부저 불필요).
 
 핀 배치 (ADC1 채널만 사용 — WiFi 사용 중 ADC2 핀은 불안정):
 
@@ -108,7 +128,6 @@ components/ 대시보드 UI 컴포넌트
 | 천장 진동센서 | GPIO35 |
 | 바닥 소리센서 | GPIO32 |
 | 바닥 진동센서 | GPIO33 |
-| 부저(기본 경고음) | GPIO25 |
 | I2S BCLK (MAX98357A) | GPIO26 |
 | I2S LRC (MAX98357A) | GPIO27 |
 | I2S DIN (MAX98357A) | GPIO14 |
@@ -120,7 +139,8 @@ components/ 대시보드 UI 컴포넌트
 2. Tools → Partition Scheme에서 LittleFS가 포함된 옵션(예: "Default 4MB with spiffs") 선택
    — 다운로드한 음성 wav를 임시로 저장하는 데 사용됩니다
 3. `arduino/noise_node/config.example.h`를 같은 폴더에 `config.h`로 복사
-4. `config.h`에 WiFi 정보, Supabase URL/anon key, `FLOOR_ID`(이 노드가 담당하는 층) 입력
+4. `config.h`에 WiFi 정보, Supabase URL/anon key, `FLOOR_ID`(이 노드가 담당하는 층),
+   `DEFAULT_ALERT_URL`(고정 경고 음성 wav URL — 아래 "고정 경고 음성 준비하기" 참고) 입력
 5. 층마다 `FLOOR_ID`만 바꿔서 각 노드에 업로드
 
 ### 캘리브레이션 (중요)
@@ -167,8 +187,8 @@ npm run dev
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (서버 전용, `NEXT_PUBLIC_` 접두사 없음에 주의)
    - `GEMINI_API_KEY` ([Google AI Studio](https://aistudio.google.com/apikey)에서 발급한
-     Gemini API 키. 경비실 음성 메시지 기능에만 사용되며, 없어도 빌드/기본 경고음 기능은
-     정상 동작한다)
+     Gemini API 키. 경비실이 직접 문구를 입력해 보내는 음성 메시지 기능에만 사용되며,
+     없어도 빌드와 `DEFAULT_ALERT_URL` 기반 고정 경고 음성 재생은 정상 동작한다)
 3. Deploy
 
 ### 화면 구성
@@ -189,5 +209,8 @@ npm run dev
   따라 몇 초의 지연이 있을 수 있습니다. wav는 24kHz/16bit/mono 비압축이라 메시지가 길수록
   파일 크기와 다운로드 시간이 늘어나니 메시지는 짧게(최대 200자 제한) 쓰는 것을 권장합니다.
 - Gemini TTS는 미리보기(preview) 모델이라 요금/쿼터/모델명이 변경될 수 있습니다.
-  `GEMINI_API_KEY`가 없거나 호출이 실패하면 해당 요청만 에러를 반환하고, "기본 경고음만
-  보내기"와 자동 감지 경고는 영향받지 않습니다.
+  `GEMINI_API_KEY`가 없거나 호출이 실패하면 해당 요청만 에러를 반환하고, 이미 만들어 둔
+  `DEFAULT_ALERT_URL` 재생(자동 감지 경고, "정해진 경고 음성 보내기")은 영향받지 않습니다.
+- 부저를 없애고 모든 경고를 wav 재생으로 통일했기 때문에, WiFi/Supabase/Storage 중 하나라도
+  응답이 없으면 그 순간의 경고는 소리 없이 조용히 실패합니다(Serial 로그에만 기록). 부저 같은
+  네트워크 독립적인 최후 수단이 필요하면 언제든 다시 추가할 수 있습니다.
