@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const PRESET_MESSAGES = [
   "층간소음이 발생하고 있습니다. 주의를 부탁드립니다.",
@@ -15,6 +15,13 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileLabel, setFileLabel] = useState("");
+  const [sendingFile, setSendingFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [fileSentAt, setFileSentAt] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function send(message: string) {
     setSending(true);
@@ -35,6 +42,32 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
       setError((err as Error).message);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendFile() {
+    if (!selectedFile) return;
+    setSendingFile(true);
+    setFileError(null);
+    try {
+      const form = new FormData();
+      form.append("floor_id", String(floorId));
+      if (fileLabel.trim()) form.append("message", fileLabel.trim());
+      form.append("audio", selectedFile);
+
+      const res = await fetch("/api/alerts", { method: "POST", body: form });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "전송 실패");
+      }
+      setFileSentAt(Date.now());
+      setSelectedFile(null);
+      setFileLabel("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      setFileError((err as Error).message);
+    } finally {
+      setSendingFile(false);
     }
   }
 
@@ -101,6 +134,61 @@ export default function SendMessageForm({ floorId }: { floorId: number }) {
       {error && (
         <p className="muted" style={{ color: "var(--danger)", marginTop: 8 }}>
           {error}
+        </p>
+      )}
+
+      <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--border)" }} />
+
+      <h3 className="floor-title" style={{ margin: 0 }}>
+        오디오 파일 직접 보내기
+      </h3>
+      <p className="muted" style={{ marginTop: 8 }}>
+        직접 준비한 wav 파일을 AI 변환 없이 그대로 저장해 재생합니다 (wav 파일만 지원, 4MB
+        이하).
+      </p>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/wav,.wav"
+        disabled={sendingFile}
+        onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+        style={{ marginTop: 8 }}
+      />
+
+      <input
+        type="text"
+        value={fileLabel}
+        onChange={(e) => setFileLabel(e.target.value)}
+        placeholder="경고 이력에 표시할 설명 (선택 사항)"
+        maxLength={200}
+        disabled={sendingFile}
+        style={{
+          display: "block",
+          width: "100%",
+          marginTop: 8,
+          padding: "10px 12px",
+          borderRadius: 8,
+          border: "1px solid var(--border)",
+          background: "var(--bg)",
+          color: "var(--text)",
+          fontSize: 14,
+        }}
+      />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+        <button
+          className="btn primary"
+          disabled={sendingFile || !selectedFile}
+          onClick={sendFile}
+        >
+          {sendingFile ? "전송 중..." : "이 오디오 그대로 보내기"}
+        </button>
+        {fileSentAt && !sendingFile && !fileError && <span className="muted">전송 완료</span>}
+      </div>
+      {fileError && (
+        <p className="muted" style={{ color: "var(--danger)", marginTop: 8 }}>
+          {fileError}
         </p>
       )}
     </div>

@@ -53,7 +53,13 @@ export default function AlertList({
             <div>
               <div>
                 {showFloor && <b>{a.floor_id}층 &middot; </b>}
-                {ev ? NOISE_TYPE_LABEL[ev.noise_type] : a.message ? "경비실 음성 메시지" : "경비실 고정 경고 음성"}
+                {ev
+                  ? NOISE_TYPE_LABEL[ev.noise_type]
+                  : a.message
+                  ? "경비실 음성 메시지"
+                  : a.audio_url
+                  ? "경비실 오디오 파일"
+                  : "경비실 고정 경고 음성"}
                 {ev && (
                   <span className="muted">
                     {" "}
