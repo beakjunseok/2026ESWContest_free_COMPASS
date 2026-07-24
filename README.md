@@ -79,33 +79,20 @@ components/ 대시보드 UI 컴포넌트
 
 ### 1-5. 음성 경고 메시지 (경비실 → 특정 층 스피커)
 
-경비실은 층 상세 페이지(`/floors/[id]`)에서 텍스트로 메시지를 보내거나, 직접 준비한 wav
-파일을 그대로 보낼 수 있습니다.
+경비실은 층 상세 페이지(`/floors/[id]`)에서 미리 정해둔 문구를 고르거나 직접 문장을 입력해
+해당 층 스피커로 실제 음성 메시지를 보낼 수 있습니다.
 
-**텍스트 → TTS 음성 (미리 정해둔 문구 선택 또는 직접 입력)**
-
-1. 경비실이 문구 선택/입력 후 전송 → `/api/alerts`(POST, JSON)가 텍스트를 받는다
+1. 경비실이 문구 선택/입력 후 전송 → `/api/alerts`(POST)가 텍스트를 받는다
 2. 서버가 **Gemini API**(Google AI Studio 키, `gemini-2.5-flash-preview-tts` 모델)로 음성을
    합성한다. Gemini는 raw PCM을 반환하므로 서버에서 표준 wav 헤더를 붙여 Supabase
    Storage(`alert-audio` 버킷)에 업로드하고, `alerts.message`(원문 텍스트)와
    `alerts.audio_url`(공개 wav URL)을 저장한다
-3. 메시지 없이 "정해진 경고 음성 보내기"를 선택하면 `audio_url`이 비어 있는 채로 저장되고,
+3. 해당 층 ESP32 노드가 폴링 중 이 경고를 발견하면 wav를 LittleFS에 내려받아 I2S 앰프로
+   재생한다
+4. 메시지 없이 "정해진 경고 음성 보내기"를 선택하면 `audio_url`이 비어 있는 채로 저장되고,
    ESP32는 그 경우 `config.h`의 `DEFAULT_ALERT_URL`(고정 경고 음성)을 대신 재생한다.
    자동 감지 경고(시스템이 만든 경고)도 항상 `audio_url`이 비어 있으므로 동일하게
    `DEFAULT_ALERT_URL`이 재생된다
-
-**오디오 파일 직접 보내기 (AI 변환 없음)**
-
-1. 경비실이 층 상세 페이지 하단의 "오디오 파일 직접 보내기"에서 wav 파일을 선택 후 전송 →
-   `/api/alerts`(POST, `multipart/form-data`: `floor_id`, `audio` 파일, `message`는 선택
-   라벨)로 전달된다
-2. 서버는 TTS를 거치지 않고 업로드된 파일이 진짜 wav인지(RIFF/WAVE 헤더)만 확인한 뒤
-   그대로 Storage에 저장하고 공개 URL을 `audio_url`로 저장한다 — "URL을 저장해두고 그대로
-   재생"하는 방식으로, AI가 오디오를 다시 만들지 않는다
-3. 이후 재생 흐름은 텍스트 메시지와 동일 (ESP32가 그 wav를 내려받아 재생)
-4. wav 파일만 지원하며(노드가 wav만 디코딩 가능), 4MB를 넘는 파일은 거부된다
-
-두 방식 모두 이후 처리(ESP32가 `audio_url`을 내려받아 재생)는 동일하다.
 
 > Google Cloud Text-to-Speech(`texttospeech.googleapis.com`)와 Gemini API는 서로 다른
 > 제품입니다. Google AI Studio에서 발급한 Gemini API 키는 Cloud TTS에는 쓸 수 없지만,
