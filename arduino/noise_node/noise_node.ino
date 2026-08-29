@@ -95,6 +95,11 @@ static uint32_t lastUploadMs = 0;
 
 static WiFiClientSecure tlsClient;
 
+// 2초마다 TLS 핸드셰이크를 새로 맺으면(3일이면 약 13만 회) 힙이 단편화되어 몇 시간 뒤
+// 전송이 조용히 멈추는 일이 잦다. HTTPClient 를 전역으로 두고 setReuse(true) 로
+// 연결을 유지해 두 번째 요청부터는 핸드셰이크를 건너뛴다.
+static HTTPClient http;
+
 // GPIO36(ADC1_CH0) / GPIO39(ADC1_CH3) 는 채널 전환 직후 첫 샘플이 낮게 튀는 알려진
 // 이슈가 있어 한 번 읽고 버린다. 나머지 핀은 그대로 읽는다.
 static inline int adcRead(int pin) {
@@ -177,7 +182,6 @@ static int supabasePost(const char* path, const String& body) {
     if (WiFi.status() != WL_CONNECTED) return -1;
   }
 
-  HTTPClient http;
   String url = String(SUPABASE_URL) + path;
   if (!http.begin(tlsClient, url)) {
     Serial.println("[HTTP] begin failed");
@@ -198,7 +202,7 @@ static int supabasePost(const char* path, const String& body) {
   } else {
     Serial.printf("[HTTP] POST %s -> %d OK\n", path, code);
   }
-  http.end();
+  http.end();   // setReuse(true) 이므로 TCP/TLS 연결 자체는 유지된다
   return code;
 }
 
@@ -242,6 +246,8 @@ void setup() {
   // 데모 편의를 위해 TLS 인증서 검증을 생략한다.
   // 운영 시에는 tlsClient.setCACert(...) 로 루트 CA 를 고정할 것 (README 5장).
   tlsClient.setInsecure();
+
+  http.setReuse(true);   // keep-alive. 위 http 선언부 주석 참고
 
   lastUploadMs = millis();
 }
