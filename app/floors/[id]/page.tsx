@@ -98,8 +98,8 @@ export default function FloorDetailPage() {
       ) : (
         <>
           <p className="muted">
-            진동 빈도: <b>{vibFrequencyLabel(readings.filter((r) => r.floor_vibration >= 1).length)}</b>
-            {" "}({readings.filter((r) => r.floor_vibration >= 1).length}회 / 최근 {readings.length}건)
+            진동 빈도: <b>{vibFrequencyLabel(readings.filter((r) => r.floor_vibration !== 0).length)}</b>
+            {" "}({readings.filter((r) => r.floor_vibration !== 0).length}회 / 최근 {readings.length}건)
           </p>
           <table className="table">
             <thead>
@@ -114,7 +114,7 @@ export default function FloorDetailPage() {
                 <tr key={r.id}>
                   <td>{new Date(r.created_at).toLocaleTimeString("ko-KR")}</td>
                   <td>{soundAdcToDb(r.floor_sound_db).toFixed(1)}</td>
-                  <td>{r.floor_vibration >= 1 ? "O" : "X"}</td>
+                  <td>{r.floor_vibration !== 0 ? "O" : "X"}</td>
                 </tr>
               ))}
             </tbody>

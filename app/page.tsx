@@ -42,7 +42,7 @@ export default function DashboardPage() {
 
       for (const r of (readingRows as SensorReading[]) ?? []) {
         if (!latest[r.floor_id]) latest[r.floor_id] = r;
-        if (new Date(r.created_at).getTime() > fiveMinAgo && r.floor_vibration >= 1) {
+        if (new Date(r.created_at).getTime() > fiveMinAgo && r.floor_vibration !== 0) {
           vibCount[r.floor_id] = (vibCount[r.floor_id] ?? 0) + 1;
         }
       }
@@ -63,7 +63,7 @@ export default function DashboardPage() {
         (payload) => {
           const reading = payload.new as SensorReading;
           setLatestByFloor((prev) => ({ ...prev, [reading.floor_id]: reading }));
-          if (reading.floor_vibration >= 1) {
+          if (reading.floor_vibration !== 0) {
             setVibCountByFloor((prev) => ({
               ...prev,
               [reading.floor_id]: (prev[reading.floor_id] ?? 0) + 1,
