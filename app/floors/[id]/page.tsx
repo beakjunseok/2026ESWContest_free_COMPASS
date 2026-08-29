@@ -7,6 +7,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
 import SendMessageForm from "@/components/SendMessageForm";
+import { soundAdcToDb, vibAdcToDb } from "@/lib/sensor";
 
 export default function FloorDetailPage() {
   const params = useParams<{ id: string }>();
@@ -109,10 +110,10 @@ export default function FloorDetailPage() {
             {readings.map((r) => (
               <tr key={r.id}>
                 <td>{new Date(r.created_at).toLocaleTimeString("ko-KR")}</td>
-                <td>{r.ceiling_sound_db.toFixed(1)}</td>
-                <td>{r.ceiling_vibration.toFixed(1)}</td>
-                <td>{r.floor_sound_db.toFixed(1)}</td>
-                <td>{r.floor_vibration.toFixed(1)}</td>
+                <td>{soundAdcToDb(r.ceiling_sound_db).toFixed(1)}</td>
+                <td>{vibAdcToDb(r.ceiling_vibration).toFixed(1)}</td>
+                <td>{soundAdcToDb(r.floor_sound_db).toFixed(1)}</td>
+                <td>{vibAdcToDb(r.floor_vibration).toFixed(1)}</td>
               </tr>
             ))}
           </tbody>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { Floor, SensorReading } from "@/lib/types";
+import { soundAdcToDb, vibAdcToDb } from "@/lib/sensor";
 
 export default function FloorCard({
   floor,
@@ -25,19 +26,19 @@ export default function FloorCard({
         <>
           <div className="reading-row">
             <span>천장 소리</span>
-            <b>{reading.ceiling_sound_db.toFixed(1)} dB</b>
+            <b>{soundAdcToDb(reading.ceiling_sound_db).toFixed(1)} dB</b>
           </div>
           <div className="reading-row">
             <span>천장 진동</span>
-            <b>{reading.ceiling_vibration.toFixed(1)} dB</b>
+            <b>{vibAdcToDb(reading.ceiling_vibration).toFixed(1)} dB</b>
           </div>
           <div className="reading-row">
             <span>바닥 소리</span>
-            <b>{reading.floor_sound_db.toFixed(1)} dB</b>
+            <b>{soundAdcToDb(reading.floor_sound_db).toFixed(1)} dB</b>
           </div>
           <div className="reading-row">
             <span>바닥 진동</span>
-            <b>{reading.floor_vibration.toFixed(1)} dB</b>
+            <b>{vibAdcToDb(reading.floor_vibration).toFixed(1)} dB</b>
           </div>
         </>
       ) : (
