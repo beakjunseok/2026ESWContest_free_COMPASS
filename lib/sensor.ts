@@ -1,8 +1,8 @@
 // 바닥 소리 센서: ADC 1500~2500 → 0~80 dB (구간별 선형)
 // ADC 1500 이하 → 0 dB, ADC 2000 → 30 dB, ADC 2500 이상 → 80 dB
-const SOUND_ADC_MIN = 1500;
+const SOUND_ADC_MIN = 1900;
 const SOUND_ADC_MID = 2000;
-const SOUND_ADC_MAX = 2500;
+const SOUND_ADC_MAX = 2100;
 const SOUND_DB_MIN = 0;
 const SOUND_DB_MID = 30;
 const SOUND_DB_MAX = 80;
