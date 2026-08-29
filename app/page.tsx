@@ -9,6 +9,7 @@ import AlertList, { AlertWithEvent } from "@/components/AlertList";
 export default function DashboardPage() {
   const [floors, setFloors] = useState<Floor[]>([]);
   const [latestByFloor, setLatestByFloor] = useState<Record<number, SensorReading>>({});
+  const [vibCountByFloor, setVibCountByFloor] = useState<Record<number, number>>({});
   const [alerts, setAlerts] = useState<AlertWithEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,11 +37,18 @@ export default function DashboardPage() {
       setFloors((floorRows as Floor[]) ?? []);
 
       const latest: Record<number, SensorReading> = {};
+      const vibCount: Record<number, number> = {};
+      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+
       for (const r of (readingRows as SensorReading[]) ?? []) {
         if (!latest[r.floor_id]) latest[r.floor_id] = r;
+        if (new Date(r.created_at).getTime() > fiveMinAgo && r.floor_vibration >= 1) {
+          vibCount[r.floor_id] = (vibCount[r.floor_id] ?? 0) + 1;
+        }
       }
-      setLatestByFloor(latest);
 
+      setLatestByFloor(latest);
+      setVibCountByFloor(vibCount);
       setAlerts((alertRows as unknown as AlertWithEvent[]) ?? []);
       setLoading(false);
     }
@@ -55,6 +63,12 @@ export default function DashboardPage() {
         (payload) => {
           const reading = payload.new as SensorReading;
           setLatestByFloor((prev) => ({ ...prev, [reading.floor_id]: reading }));
+          if (reading.floor_vibration >= 1) {
+            setVibCountByFloor((prev) => ({
+              ...prev,
+              [reading.floor_id]: (prev[reading.floor_id] ?? 0) + 1,
+            }));
+          }
         }
       )
       .on(
@@ -105,6 +119,7 @@ export default function DashboardPage() {
             floor={floor}
             reading={latestByFloor[floor.id] ?? null}
             hasOpenAlert={openAlertFloorIds.has(floor.id)}
+            vibCount={vibCountByFloor[floor.id] ?? 0}
           />
         ))}
       </div>

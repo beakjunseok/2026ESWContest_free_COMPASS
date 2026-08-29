@@ -7,7 +7,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
 import SendMessageForm from "@/components/SendMessageForm";
-import { soundAdcToDb } from "@/lib/sensor";
+import { soundAdcToDb, vibFrequencyLabel } from "@/lib/sensor";
 
 export default function FloorDetailPage() {
   const params = useParams<{ id: string }>();
@@ -96,24 +96,30 @@ export default function FloorDetailPage() {
       {readings.length === 0 ? (
         <p className="muted">아직 수신된 데이터가 없습니다.</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>시각</th>
-              <th>바닥 소리(dB)</th>
-              <th>바닥 진동</th>
-            </tr>
-          </thead>
-          <tbody>
-            {readings.map((r) => (
-              <tr key={r.id}>
-                <td>{new Date(r.created_at).toLocaleTimeString("ko-KR")}</td>
-                <td>{soundAdcToDb(r.floor_sound_db).toFixed(1)}</td>
-                <td>{r.floor_vibration >= 1 ? "O" : "X"}</td>
+        <>
+          <p className="muted">
+            진동 빈도: <b>{vibFrequencyLabel(readings.filter((r) => r.floor_vibration >= 1).length)}</b>
+            {" "}({readings.filter((r) => r.floor_vibration >= 1).length}회 / 최근 {readings.length}건)
+          </p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>시각</th>
+                <th>바닥 소리(dB)</th>
+                <th>바닥 진동</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {readings.map((r) => (
+                <tr key={r.id}>
+                  <td>{new Date(r.created_at).toLocaleTimeString("ko-KR")}</td>
+                  <td>{soundAdcToDb(r.floor_sound_db).toFixed(1)}</td>
+                  <td>{r.floor_vibration >= 1 ? "O" : "X"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
       <h2 className="section-title">경고 이력</h2>

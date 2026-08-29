@@ -1,16 +1,18 @@
-// 바닥 소리 센서: 지수 함수 변환 dB = A × e^(B × ADC)
-// 기준점: ADC 2000 → 37 dB, ADC 2800 → 85 dB
-const SOUND_EXP_A = 4.625;
-const SOUND_EXP_B = 0.001040;
-
-const VIB_DB_MIN = 25;
-const VIB_DB_MAX = 90;
+// 소리: 측정된 안정 기준값(ADC 1981)에서의 편차를 로그 스케일로 dB 변환
+// 안정 시 ADC 편차 ≈ 19 → 35 dB (조용한 방)
+// ADC 2230 이상 → 57 dB (충격소음 기준) 초과
+const QUIET_ADC = 1981;
+const NOISE_FLOOR = 19;
+const QUIET_DB = 35;
 
 export function soundAdcToDb(adcValue: number): number {
-  return SOUND_EXP_A * Math.exp(SOUND_EXP_B * adcValue);
+  const deviation = Math.max(Math.abs(adcValue - QUIET_ADC), NOISE_FLOOR);
+  return QUIET_DB + 20 * Math.log10(deviation / NOISE_FLOOR);
 }
 
-export function vibAdcToDb(adcValue: number): number {
-  const ratio = Math.min(Math.max(adcValue / 4095, 0), 1);
-  return VIB_DB_MIN + ratio * (VIB_DB_MAX - VIB_DB_MIN);
+export function vibFrequencyLabel(count: number): string {
+  if (count === 0) return "없음";
+  if (count <= 3) return "낮음";
+  if (count <= 8) return "보통";
+  return "높음";
 }

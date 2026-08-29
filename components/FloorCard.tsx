@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import type { Floor, SensorReading } from "@/lib/types";
-import { soundAdcToDb, vibAdcToDb } from "@/lib/sensor";
+import { soundAdcToDb, vibFrequencyLabel } from "@/lib/sensor";
 
 export default function FloorCard({
   floor,
   reading,
   hasOpenAlert,
+  vibCount,
 }: {
   floor: Floor;
   reading: SensorReading | null;
   hasOpenAlert: boolean;
+  vibCount: number;
 }) {
   return (
     <Link
@@ -25,20 +27,12 @@ export default function FloorCard({
       {reading ? (
         <>
           <div className="reading-row">
-            <span>천장 소리</span>
-            <b>{soundAdcToDb(reading.ceiling_sound_db).toFixed(1)} dB</b>
-          </div>
-          <div className="reading-row">
-            <span>천장 진동</span>
-            <b>{vibAdcToDb(reading.ceiling_vibration).toFixed(1)} dB</b>
-          </div>
-          <div className="reading-row">
             <span>바닥 소리</span>
             <b>{soundAdcToDb(reading.floor_sound_db).toFixed(1)} dB</b>
           </div>
           <div className="reading-row">
-            <span>바닥 진동</span>
-            <b>{vibAdcToDb(reading.floor_vibration).toFixed(1)} dB</b>
+            <span>바닥 진동 빈도</span>
+            <b>{vibFrequencyLabel(vibCount)} ({vibCount}회)</b>
           </div>
         </>
       ) : (
