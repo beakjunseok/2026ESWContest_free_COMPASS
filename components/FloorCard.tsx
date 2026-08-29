@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Floor, SensorReading } from "@/lib/types";
-import { soundAdcToDb, vibFrequencyLabel } from "@/lib/sensor";
+import { vibFrequencyLabel } from "@/lib/sensor";
 
 export default function FloorCard({
   floor,
@@ -28,7 +28,7 @@ export default function FloorCard({
         <>
           <div className="reading-row">
             <span>바닥 소리</span>
-            <b>{soundAdcToDb(reading.floor_sound_db).toFixed(1)} dB</b>
+            <b>{reading.floor_sound_db !== 0 ? "O" : "X"}</b>
           </div>
           <div className="reading-row">
             <span>바닥 진동 빈도</span>
