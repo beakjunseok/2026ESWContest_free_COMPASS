@@ -156,7 +156,7 @@ components/ 대시보드 UI 컴포넌트
 1. [Supabase 대시보드](https://supabase.com/dashboard)에서 프로젝트 생성 (또는 기존 프로젝트 사용)
 2. SQL Editor에서 `supabase/migrations/` 아래 파일을 **번호 순서대로** 전체 실행
    - `0001_init.sql` — `floors`, `sensor_readings`, `noise_events`, `alerts` 테이블,
-     소음 위치 판정 트리거, RLS 정책, Realtime 발행 등록, 기본 5개 층 시드 데이터
+     소음 위치 판정 트리거, RLS 정책, Realtime 발행 등록, 기본 층 시드 데이터(0005에서 1~3층으로 축소)
      (필요 시 층 수 조정: `floors` 테이블에 행 추가/삭제)
    - `0002_lock_legal_thresholds.sql` — 층별 소음 기준 컬럼 제거 + 법정 고정값(Lmax
      57/52dB, 공기전달 45/40dB)을 트리거에 상수로 반영 + 층별 기준 수정 권한 제거
