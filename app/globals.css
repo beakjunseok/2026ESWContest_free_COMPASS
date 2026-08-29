@@ -8,6 +8,7 @@
   --warn: #b98900;
   --danger: #d1273d;
   --danger-bg: #fdecee;
+  --warn-bg: #fdf6e3;
   --accent: #2563eb;
 }
 
@@ -22,6 +23,7 @@
     --warn: #e0b13c;
     --danger: #ff5a68;
     --danger-bg: #3a1218;
+    --warn-bg: #332a11;
     --accent: #5b8def;
   }
 }
@@ -87,6 +89,11 @@ body {
   background: var(--danger-bg);
 }
 
+.floor-card.status-warn {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+
 .floor-title {
   font-size: 16px;
   font-weight: 700;
@@ -112,6 +119,16 @@ body {
   color: var(--danger);
 }
 
+.status-pill.warn {
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+}
+
+.status-pill.idle {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+}
+
 .reading-row {
   display: flex;
   justify-content: space-between;
@@ -122,6 +139,34 @@ body {
 
 .reading-row b {
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reading-row b.hit {
+  color: var(--warn);
+}
+
+.reading-row b.miss {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* O/X 옆의 실제 dB 값 — 임계값을 눈으로 확인하고 보정할 수 있게 같이 보여준다 */
+.reading-db {
+  display: inline-block;
+  min-width: 62px;
+  margin-left: 8px;
+  text-align: right;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.alert-badge {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
 }
 
 .section-title {
@@ -242,4 +287,31 @@ body {
 .table th {
   color: var(--muted);
   font-weight: 600;
+}
+
+/* 법정 기준을 넘긴 측정값 셀 */
+.table td.over {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* 경고 항목 옆 소음 진행/종료 표시 */
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.tag.ok {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+
+.tag.danger {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
 }

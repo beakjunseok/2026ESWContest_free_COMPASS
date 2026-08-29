@@ -7,7 +7,16 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { Floor, SensorReading } from "@/lib/types";
 import AlertList, { AlertWithEvent } from "@/components/AlertList";
 import SendMessageForm from "@/components/SendMessageForm";
-import { vibFrequencyLabel } from "@/lib/sensor";
+import {
+  DETECT_SOUND_DB,
+  DETECT_VIB_DB,
+  SILENCE_DB,
+  formatDb,
+  isSoundDetected,
+  isVibDetected,
+  limitsAt,
+  vibFrequencyLabel,
+} from "@/lib/sensor";
 
 export default function FloorDetailPage() {
   const params = useParams<{ id: string }>();
@@ -81,6 +90,9 @@ export default function FloorDetailPage() {
     return <p className="muted">불러오는 중...</p>;
   }
 
+  const vibHits = readings.filter((r) => isVibDetected(r.floor_vibration)).length;
+  const soundHits = readings.filter((r) => isSoundDetected(r.floor_sound_db)).length;
+
   return (
     <>
       <Link href="/" className="back-link">
@@ -98,8 +110,12 @@ export default function FloorDetailPage() {
       ) : (
         <>
           <p className="muted">
-            진동 빈도: <b>{vibFrequencyLabel(readings.filter((r) => r.floor_vibration !== 0).length)}</b>
-            {" "}({readings.filter((r) => r.floor_vibration !== 0).length}회 / 최근 {readings.length}건)
+            진동 빈도: <b>{vibFrequencyLabel(vibHits, readings.length)}</b> ({vibHits}회 /
+            최근 {readings.length}건) · 소리 감지 {soundHits}회
+          </p>
+          <p className="muted">
+            O 로 표시되는 감지 임계값은 소리 {DETECT_SOUND_DB}dB / 진동 {DETECT_VIB_DB}dB 이고,
+            아무 소리·진동이 없을 때의 하한은 {SILENCE_DB}dB 입니다.
           </p>
           <table className="table">
             <thead>
@@ -110,13 +126,23 @@ export default function FloorDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {readings.map((r) => (
-                <tr key={r.id}>
-                  <td>{new Date(r.created_at).toLocaleTimeString("ko-KR")}</td>
-                  <td>{r.floor_sound_db !== 0 ? "O" : "X"}</td>
-                  <td>{r.floor_vibration !== 0 ? "O" : "X"}</td>
-                </tr>
-              ))}
+              {readings.map((r) => {
+                const at = new Date(r.created_at);
+                const lim = limitsAt(at);
+                return (
+                  <tr key={r.id}>
+                    <td>{at.toLocaleTimeString("ko-KR")}</td>
+                    <td className={r.floor_sound_db >= lim.airborne ? "over" : undefined}>
+                      {isSoundDetected(r.floor_sound_db) ? "O" : "X"}{" "}
+                      <span className="muted">{formatDb(r.floor_sound_db)}</span>
+                    </td>
+                    <td className={r.floor_vibration >= lim.impact ? "over" : undefined}>
+                      {isVibDetected(r.floor_vibration) ? "O" : "X"}{" "}
+                      <span className="muted">{formatDb(r.floor_vibration)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </>

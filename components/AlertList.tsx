@@ -57,8 +57,15 @@ export default function AlertList({
                 {ev && (
                   <span className="muted">
                     {" "}
-                    ({ev.measured_db.toFixed(1)}dB / 기준 {ev.limit_db.toFixed(1)}dB,
-                    신뢰도 {ev.confidence === "high" ? "높음" : "보통"})
+                    (최고 {ev.measured_db.toFixed(1)}dB / 기준 {ev.limit_db.toFixed(1)}dB,
+                    신뢰도 {ev.confidence === "high" ? "높음" : "보통"}, {ev.exceed_count}회 초과)
+                  </span>
+                )}
+                {ev && (
+                  <span className={ev.resolved_at ? "tag ok" : "tag danger"}>
+                    {ev.resolved_at
+                      ? `소음 종료 ${new Date(ev.resolved_at).toLocaleTimeString("ko-KR")}`
+                      : "소음 진행 중"}
                   </span>
                 )}
               </div>

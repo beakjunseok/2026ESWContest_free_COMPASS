@@ -7,8 +7,6 @@ export type Floor = {
 export type SensorReading = {
   id: number;
   floor_id: number;
-  ceiling_sound_db: number;
-  ceiling_vibration: number;
   floor_sound_db: number;
   floor_vibration: number;
   created_at: string;
@@ -23,7 +21,12 @@ export type NoiseEvent = {
   limit_db: number;
   confidence: "high" | "medium";
   is_day: boolean;
+  /** 이 이벤트에서 기준을 초과한 마지막 측정 시각 (에피소드 지속 판단용) */
+  last_exceeded_at: string;
+  /** 이 이벤트 동안 기준을 넘긴 측정 횟수 */
+  exceed_count: number;
   created_at: string;
+  /** 30초 이상 조용해져 자동 종료된 시각. null 이면 소음이 진행 중 */
   resolved_at: string | null;
 };
 

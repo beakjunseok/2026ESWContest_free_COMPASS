@@ -64,6 +64,10 @@ static const uint32_t UPLOAD_INTERVAL_MS = 2000;   // 전송 주기
 // 조정 방법: 조용한 상태에서 시리얼에 찍히는 pp 를 읽어 *_ADC_PP_MIN 으로,
 // 기준을 확실히 넘는 소음/충격을 줬을 때의 pp 를 *_ADC_PP_MAX 로 넣는다.
 // 그 다음 소음측정기(스마트폰 앱 가능)와 dB 출력을 비교하며 *_DB_MIN/MAX 를 미세조정한다.
+//
+// 주의: SOUND_DB_MIN / VIB_DB_MIN 은 "아무 소리·진동이 없을 때 올라가는 값"이다. 웹은
+// 이 하한을 무음으로 알고 O/X 를 판정하므로(lib/sensor.ts 의 SILENCE_DB), 두 값을 바꾸면
+// lib/sensor.ts 의 SILENCE_DB 도 같이 바꿔야 한다. 지금은 둘 다 30 으로 맞춰져 있다.
 static const int    SOUND_ADC_PP_MIN = 30;
 static const int    SOUND_ADC_PP_MAX = 2200;
 static const double SOUND_DB_MIN     = 30.0;
