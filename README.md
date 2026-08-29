@@ -125,18 +125,13 @@ components/ 대시보드 UI 컴포넌트
 핀 배치 (ADC1 채널만 사용 — WiFi 사용 중 ADC2 핀은 불안정):
 
 | 신호 | 핀 |
-|---|---|
-| 신호 | 핀 |
-|---|---|
 | 1층 소리센서 (SOUND1) | GPIO34 |
 | 1층 진동센서 (VIB1) | GPIO36 |
 | 2층 소리센서 (SOUND2) | GPIO35 |
 | 2층 진동센서 (VIB2) | GPIO39 |
 | 3층 소리센서 (SOUND3) | GPIO32 |
 | 3층 진동센서 (VIB3) | GPIO33 |
-| I2S BCLK (MAX98357A) | GPIO26 |
-| I2S LRC (MAX98357A) | GPIO27 |
-| I2S DIN (MAX98357A) | GPIO14 |
+
 
 ### 설정
 
