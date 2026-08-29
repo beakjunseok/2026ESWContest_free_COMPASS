@@ -126,10 +126,14 @@ components/ 대시보드 UI 컴포넌트
 
 | 신호 | 핀 |
 |---|---|
-| 천장 소리센서 | GPIO34 |
-| 천장 진동센서 | GPIO35 |
-| 바닥 소리센서 | GPIO32 |
-| 바닥 진동센서 | GPIO33 |
+| 신호 | 핀 |
+|---|---|
+| 1층 소리센서 (SOUND1) | GPIO34 |
+| 1층 진동센서 (VIB1) | GPIO36 |
+| 2층 소리센서 (SOUND2) | GPIO35 |
+| 2층 진동센서 (VIB2) | GPIO39 |
+| 3층 소리센서 (SOUND3) | GPIO32 |
+| 3층 진동센서 (VIB3) | GPIO33 |
 | I2S BCLK (MAX98357A) | GPIO26 |
 | I2S LRC (MAX98357A) | GPIO27 |
 | I2S DIN (MAX98357A) | GPIO14 |
