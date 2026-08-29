@@ -115,7 +115,18 @@ export function vibFrequencyLabel(detected: number, total: number): string {
   return "높음";
 }
 
-/** 표시용 dB 포맷 */
+/** 소리센서 표시용 — 실제 소음도이므로 dB 를 붙인다. */
 export function formatDb(db: number): string {
   return `${db.toFixed(1)} dB`;
+}
+
+/**
+ * 진동센서 표시용 — 단위 없는 세기 숫자로 보여준다.
+ *
+ * 진동값은 판정 편의를 위해 충격소음 최고소음도(57/52dB)와 같은 척도에 올려둔 것이지
+ * 실제로 마이크로 잰 소음도가 아니다. 화면에 "31.0 dB 진동"이라고 쓰면 진동을 소음도로
+ * 측정한 것처럼 읽히므로 숫자만 표시한다. 비교 대상인 기준값도 같은 규칙으로 쓴다.
+ */
+export function formatVib(value: number): string {
+  return value.toFixed(1);
 }

@@ -57,8 +57,11 @@ export default function AlertList({
                 {ev && (
                   <span className="muted">
                     {" "}
-                    (최고 {ev.measured_db.toFixed(1)}dB / 기준 {ev.limit_db.toFixed(1)}dB,
-                    신뢰도 {ev.confidence === "high" ? "높음" : "보통"}, {ev.exceed_count}회 초과)
+                    (최고 {ev.measured_db.toFixed(1)}
+                    {/* 충격소음은 진동센서 값이라 소음도가 아니다 — dB 를 붙이지 않는다 */}
+                    {ev.noise_type === "airborne" ? "dB" : ""} / 기준 {ev.limit_db.toFixed(1)}
+                    {ev.noise_type === "airborne" ? "dB" : ""}, 신뢰도{" "}
+                    {ev.confidence === "high" ? "높음" : "보통"}, {ev.exceed_count}회 초과)
                   </span>
                 )}
                 {ev && (

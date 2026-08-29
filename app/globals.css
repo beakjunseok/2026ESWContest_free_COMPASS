@@ -1,30 +1,58 @@
+/* ===========================================================================
+   토큰
+   - 상태색(ok/warn/danger)은 "지금 어떤 상태인가"만 나타내며 항상 기호 + 글자와 함께 쓴다.
+   - 계열색(series-sound / series-vib)은 "어느 센서인가"만 나타내며 미터·스파크라인·
+     추이 그래프에서 끝까지 동일하다. 상태에 따라 계열색을 바꾸지 않는다 — 바꾸면
+     두 센서를 구분할 채널이 사라진다.
+   두 계열색은 명/암 모드 각각에서 색각이상 분리도(ΔE 24.7 / 26.8)를 검증한 값이다.
+   =========================================================================== */
 :root {
   --bg: #f5f6f8;
   --card-bg: #ffffff;
+  --raised-bg: #fbfbfc;
   --text: #16181d;
   --muted: #6b7280;
   --border: #e3e5e9;
+  --hairline: #eceef1;
+
   --ok: #1b8a5a;
   --warn: #b98900;
   --danger: #d1273d;
-  --danger-bg: #fdecee;
+  --ok-bg: #eaf6f0;
   --warn-bg: #fdf6e3;
+  --danger-bg: #fdecee;
   --accent: #2563eb;
+
+  --series-sound: #2a78d6;
+  --series-vib: #eb6834;
+  --track: #eef0f4;
+
+  --shadow: 0 1px 2px rgba(16, 18, 22, 0.04), 0 2px 8px rgba(16, 18, 22, 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0f1115;
     --card-bg: #1a1d24;
+    --raised-bg: #21242c;
     --text: #eceef1;
     --muted: #9aa2af;
     --border: #2a2e37;
+    --hairline: #23262e;
+
     --ok: #35c785;
     --warn: #e0b13c;
     --danger: #ff5a68;
-    --danger-bg: #3a1218;
+    --ok-bg: #12291f;
     --warn-bg: #332a11;
+    --danger-bg: #3a1218;
     --accent: #5b8def;
+
+    --series-sound: #3987e5;
+    --series-vib: #d95926;
+    --track: #262a33;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -36,18 +64,24 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic",
+    sans-serif;
 }
 
+/* --------------------------------------------------------------------- 레이아웃 */
 .topbar {
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--card-bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .brand {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
   color: var(--text);
   text-decoration: none;
 }
@@ -58,11 +92,31 @@ body {
   padding: 24px;
 }
 
-.floor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
-  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.section-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 28px 0 4px;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .card {
@@ -70,116 +124,516 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
+  box-shadow: var(--shadow);
 }
 
-.floor-card {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  transition: transform 0.1s ease, border-color 0.15s ease;
-}
-
-.floor-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-}
-
-.floor-card.status-danger {
-  border-color: var(--danger);
-  background: var(--danger-bg);
-}
-
-.floor-card.status-warn {
-  border-color: var(--warn);
-  background: var(--warn-bg);
-}
-
-.floor-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin: 0 0 8px;
-}
-
-.status-pill {
-  display: inline-block;
+.mode-chip {
   font-size: 12px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 6px 12px;
   border-radius: 999px;
-  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- 요약 스탯 타일 */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stat-tile {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.stat-tile.tone-ok {
+  border-left-color: var(--ok);
+}
+.stat-tile.tone-warn {
+  border-left-color: var(--warn);
+}
+.stat-tile.tone-danger {
+  border-left-color: var(--danger);
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* 큰 숫자는 비례 숫자체로 — tabular 는 표 안에서만 쓴다 */
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 4px 0 2px;
+}
+
+.stat-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ 상태 배지 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .status-pill.ok {
-  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  background: var(--ok-bg);
   color: var(--ok);
 }
-
+.status-pill.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
 .status-pill.danger {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  background: var(--danger-bg);
   color: var(--danger);
 }
-
-.status-pill.warn {
-  background: color-mix(in srgb, var(--warn) 20%, transparent);
-  color: var(--warn);
-}
-
 .status-pill.idle {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-  color: var(--muted);
-}
-
-.reading-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--muted);
-  padding: 2px 0;
-}
-
-.reading-row b {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.reading-row b.hit {
-  color: var(--warn);
-}
-
-.reading-row b.miss {
-  color: var(--muted);
-  font-weight: 500;
-}
-
-/* O/X 옆의 실제 dB 값 — 임계값을 눈으로 확인하고 보정할 수 있게 같이 보여준다 */
-.reading-db {
-  display: inline-block;
-  min-width: 62px;
-  margin-left: 8px;
-  text-align: right;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
+  background: var(--track);
   color: var(--muted);
 }
 
 .alert-badge {
-  margin-top: 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--danger);
+  white-space: nowrap;
 }
 
-.section-title {
-  font-size: 20px;
+/* ------------------------------------------------------- 건물 단면 (층 스택) */
+.building-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* 위층이 위에 오도록 정렬해 목록 자체가 건물 단면으로 읽히게 한다 */
+.building {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.building-ground {
+  height: 8px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--border),
+    var(--border) 3px,
+    var(--card-bg) 3px,
+    var(--card-bg) 7px
+  );
+}
+
+.floor-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) minmax(240px, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 18px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--hairline);
+  border-left: 4px solid transparent;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+
+.floor-row:last-of-type {
+  border-bottom: none;
+}
+
+.floor-row:hover {
+  background: var(--raised-bg);
+}
+
+.floor-row.level-ok {
+  border-left-color: var(--ok);
+}
+.floor-row.level-warn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+.floor-row.level-danger {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+}
+.floor-row.level-idle {
+  border-left-color: var(--border);
+}
+
+.floor-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.floor-title {
+  font-size: 17px;
   font-weight: 700;
-  margin: 28px 0 4px;
+  letter-spacing: -0.01em;
 }
 
-.muted {
+.floor-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.floor-spark {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.floor-empty {
+  grid-column: 2 / -1;
+  margin: 0;
+}
+
+/* ----------------------------------------------------------------- 미터 (게이지) */
+.meter {
+  min-width: 0;
+}
+
+.meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.meter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-weight: 600;
 }
 
+/* 계열 식별용 짧은 선 — 글자에 색을 입히지 않고 옆에 표식을 둔다 */
+.series-key,
+.legend-key {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.series-sound .series-key,
+.legend-item.sound .legend-key,
+.legend-key.sound {
+  background: var(--series-sound);
+}
+
+.series-vib .series-key,
+.legend-item.vib .legend-key,
+.legend-key.vib {
+  background: var(--series-vib);
+}
+
+.legend-item.threshold .legend-key {
+  background: repeating-linear-gradient(
+    to right,
+    var(--muted),
+    var(--muted) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
+.meter-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-value b.hit {
+  color: var(--warn);
+}
+.meter-value b.miss {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.meter-value .db {
+  font-style: normal;
+  color: var(--text);
+  min-width: 62px;
+  text-align: right;
+}
+
+.meter-value .db.over {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.meter-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  overflow: visible;
+}
+
+.meter-fill {
+  height: 100%;
+  /* 막대 끝만 둥글게, 기준선(왼쪽)은 각지게 */
+  border-radius: 0 4px 4px 0;
+  transition: width 0.25s ease;
+}
+
+.series-sound .meter-fill {
+  background: var(--series-sound);
+}
+.series-vib .meter-fill {
+  background: var(--series-vib);
+}
+
+/* 임계값 눈금 — 막대가 이 선을 넘었는지가 기하학적으로 보이게 한다 */
+.meter-mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+
+.meter-mark.detect {
+  background: var(--muted);
+  opacity: 0.4;
+}
+
+.meter-mark.limit {
+  width: 2px;
+  background: var(--danger);
+  opacity: 0.55;
+}
+
+.meter-mark.limit.crossed {
+  opacity: 1;
+  top: -5px;
+  bottom: -5px;
+}
+
+/* -------------------------------------------------------------- 스파크라인 */
+.sparkline {
+  width: 160px;
+  /* 비율 유지 확대/축소 — 고정 높이를 주면 좁은 화면에서 끝점 원이 찌그러진다 */
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.sparkline.empty {
+  height: 30px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.spark-line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.spark-line.sound {
+  stroke: var(--series-sound);
+}
+.spark-line.vib {
+  stroke: var(--series-vib);
+}
+
+/* 표면색 링을 둘러 두 점이 겹쳐도 읽히게 한다 */
+.spark-dot {
+  stroke: var(--card-bg);
+  stroke-width: 1.5;
+}
+.spark-dot.sound {
+  fill: var(--series-sound);
+}
+.spark-dot.vib {
+  fill: var(--series-vib);
+}
+
+/* ------------------------------------------------------------ 추이 그래프 */
+.chart {
+  margin: 0;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.chart-legend.inline {
+  margin-bottom: 0;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.chart-plot {
+  position: relative;
+}
+
+.chart-plot svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+}
+
+.grid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 기준선은 눈금과 구분되어야 하므로 파선 + 직접 라벨을 쓴다 */
+.threshold {
+  stroke: var(--danger);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.threshold-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.series-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.series-line.sound {
+  stroke: var(--series-sound);
+}
+.series-line.vib {
+  stroke: var(--series-vib);
+}
+
+.series-dot {
+  stroke: var(--card-bg);
+  stroke-width: 2;
+}
+.series-dot.sound {
+  fill: var(--series-sound);
+}
+.series-dot.vib {
+  fill: var(--series-vib);
+}
+
+.crosshair line {
+  stroke: var(--muted);
+  stroke-width: 1;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 8px;
+  transform: translateX(-50%);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tt-time {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 툴팁에서는 값이 주인공, 계열명은 보조 */
+.tt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.7;
+}
+
+.tt-row b {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.tt-row span {
+  color: var(--muted);
+}
+
+.chart-note {
+  margin: 10px 0 0;
+}
+
+/* --------------------------------------------------------------- 상세 화면 */
+.detail-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px 32px;
+  margin-bottom: 12px;
+}
+
+/* ----------------------------------------------------------------- 경고 목록 */
 .event-list {
   list-style: none;
   margin: 12px 0 0;
@@ -191,6 +645,7 @@ body {
 
 .event-item {
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: 10px;
   padding: 12px 14px;
   background: var(--card-bg);
@@ -202,10 +657,31 @@ body {
 }
 
 .event-item.danger {
-  border-color: var(--danger);
+  border-left-color: var(--danger);
   background: var(--danger-bg);
 }
 
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.tag.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.tag.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------------- 폼 */
 .btn {
   border: 1px solid var(--border);
   background: var(--card-bg);
@@ -270,48 +746,81 @@ body {
   font-size: 14px;
 }
 
+/* -------------------------------------------------------------------- 표 */
+/* 넓은 표는 페이지가 아니라 자기 컨테이너 안에서 스크롤한다 */
+.table-scroll {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  margin-top: 12px;
+  max-height: 420px;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 12px;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
 }
 
 .table th {
   color: var(--muted);
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
 }
 
-/* 법정 기준을 넘긴 측정값 셀 */
+.table tr:last-child td {
+  border-bottom: none;
+}
+
 .table td.over {
   color: var(--danger);
-  font-weight: 600;
+  font-weight: 700;
 }
 
-/* 경고 항목 옆 소음 진행/종료 표시 */
-.tag {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  vertical-align: middle;
+.table b.hit {
+  color: var(--warn);
 }
 
-.tag.ok {
-  background: color-mix(in srgb, var(--ok) 18%, transparent);
-  color: var(--ok);
+.table b.miss {
+  color: var(--muted);
+  font-weight: 500;
 }
 
-.tag.danger {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: var(--danger);
+/* --------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 720px) {
+  .page {
+    padding: 16px;
+  }
+
+  .floor-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .floor-id {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .floor-spark {
+    align-items: flex-start;
+  }
+
+  .sparkline {
+    width: 100%;
+    max-width: 320px;
+  }
 }
