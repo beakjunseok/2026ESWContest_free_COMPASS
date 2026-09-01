@@ -20,6 +20,7 @@ export default function Meter({
   limitDb,
   limitLabel,
   detected,
+  suppressed = false,
 }: {
   label: string;
   db: number;
@@ -28,8 +29,11 @@ export default function Meter({
   limitDb: number;
   limitLabel: string;
   detected: boolean;
+  /** 다른 층의 신호가 더 강해 이 값의 감지/초과 표시를 정상으로 낮출지 여부 */
+  suppressed?: boolean;
 }) {
-  const over = db >= limitDb;
+  const isDetected = suppressed ? false : detected;
+  const over = !suppressed && db >= limitDb;
   const clipped = db > AXIS_MAX;
   // 진동은 실제 소음도가 아니라 같은 척도에 올린 세기 값이라 단위를 붙이지 않는다.
   const fmt = series === "sound" ? formatDb : formatVib;
@@ -42,7 +46,7 @@ export default function Meter({
           {label}
         </span>
         <span className="meter-value">
-          <b className={detected ? "hit" : "miss"}>{detected ? "O" : "X"}</b>
+          <b className={isDetected ? "hit" : "miss"}>{isDetected ? "O" : "X"}</b>
           <em className={over ? "db over" : "db"}>
             {clipped ? "▲ " : ""}
             {fmt(db)}

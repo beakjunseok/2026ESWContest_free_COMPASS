@@ -35,6 +35,7 @@ export default function FloorCard({
   history,
   openAlertCount,
   now,
+  suppressed = false,
 }: {
   floor: Floor;
   reading: SensorReading | null;
@@ -42,6 +43,8 @@ export default function FloorCard({
   history: SensorReading[];
   openAlertCount: number;
   now: number;
+  /** 같은 시점에 이 층보다 신호가 더 강한 층이 있어, 감지/초과 표시를 정상으로 낮출지 여부 */
+  suppressed?: boolean;
 }) {
   const stale = reading ? isStale(reading.created_at, now) : true;
   const live = reading && !stale ? reading : null;
@@ -50,9 +53,12 @@ export default function FloorCard({
 
   // 카드 상태는 "지금 이 순간의 측정값"으로 정한다. 미확인 경고가 남아 있다고 계속
   // 경고색으로 두면 소음이 멎어도 영원히 빨간 화면이 된다.
-  const level = live
+  const rawLevel = live
     ? worstLevel(soundLevel(live.floor_sound_db, at), vibLevel(live.floor_vibration, at))
     : null;
+  // 소리/진동은 인접 층으로 새어나가기 쉽다 — 신호가 더 강한 층이 따로 있으면
+  // 이 층은 정상으로 표시해, 화면상 반응 위치가 한 곳으로 좁혀지게 한다.
+  const level = rawLevel && suppressed ? "silent" : rawLevel;
 
   return (
     <Link
@@ -82,6 +88,7 @@ export default function FloorCard({
               limitDb={limits.airborne}
               limitLabel="공기전달소음 기준"
               detected={isSoundDetected(live.floor_sound_db)}
+              suppressed={suppressed}
             />
             <Meter
               label="바닥 진동"
@@ -91,6 +98,7 @@ export default function FloorCard({
               limitDb={limits.impact}
               limitLabel="충격소음 기준"
               detected={isVibDetected(live.floor_vibration)}
+              suppressed={suppressed}
             />
           </div>
 

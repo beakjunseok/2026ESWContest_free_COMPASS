@@ -91,6 +91,44 @@ export function worstLevel(a: SensorLevel, b: SensorLevel): SensorLevel {
   return rank[a] >= rank[b] ? a : b;
 }
 
+/**
+ * 층간 신호 세기 비교용 단일 수치.
+ * floor_sound_db / floor_vibration 은 같은 dB 스케일로 환산되어 있으므로(위 파일 설명 참고)
+ * 둘 중 더 큰 값을 그 층 측정값의 "세기"로 그대로 비교할 수 있다.
+ */
+export function readingIntensity(reading: {
+  floor_sound_db: number;
+  floor_vibration: number;
+}): number {
+  return Math.max(reading.floor_sound_db, reading.floor_vibration);
+}
+
+/**
+ * 소리/진동은 바닥·벽을 타고 인접 층으로 새어나가기 쉬워, 실제로는 한 층에서 난 소음에
+ * 여러 층 센서가 동시에 임계값을 넘기는 일이 흔하다. 발생 위치는 신호가 가장 강한 층으로
+ * 보고, 같은 시점에 함께 반응한 나머지 층은 최종 판정에서 제외한다.
+ *
+ * @param candidates 그 시점에 살아있는(수신 정상) 각 층의 판정 결과
+ * @returns 신호가 가장 강한 층의 floor_id. detected/over 상태인 층이 하나도 없으면 null.
+ */
+export function dominantFloorId(
+  candidates: {
+    floorId: number;
+    level: SensorLevel;
+    reading: { floor_sound_db: number; floor_vibration: number };
+  }[]
+): number | null {
+  let best: { floorId: number; intensity: number } | null = null;
+  for (const c of candidates) {
+    if (c.level === "silent") continue;
+    const intensity = readingIntensity(c.reading);
+    if (!best || intensity > best.intensity) {
+      best = { floorId: c.floorId, intensity };
+    }
+  }
+  return best?.floorId ?? null;
+}
+
 export const LEVEL_LABEL: Record<SensorLevel, string> = {
   silent: "정상",
   detected: "소음 감지",

@@ -10,6 +10,7 @@ import {
   DETECT_SOUND_DB,
   READING_STALE_MS,
   SILENCE_DB,
+  dominantFloorId,
   isStale,
   limitsAt,
   soundLevel,
@@ -113,12 +114,18 @@ export default function DashboardPage() {
 
   const limits = limitsAt(new Date(now));
 
-  // 층별 현재 상태 집계 — 상단 요약 타일에 쓴다
-  const summary = useMemo(() => {
+  // 층별 현재 상태 집계 — 상단 요약 타일 및 건물 단면에 쓴다.
+  // 소리/진동은 인접 층으로 새어나가므로, 같은 시점에 여러 층이 동시에 반응하면
+  // 신호가 가장 강한 층(dominantFloorId) 한 곳만 실제 발생 위치로 인정한다.
+  const { summary, activeFloorId } = useMemo(() => {
     const at = new Date(now);
-    let over = 0;
-    let detected = 0;
     let offline = 0;
+    const candidates: {
+      floorId: number;
+      level: ReturnType<typeof worstLevel>;
+      reading: SensorReading;
+    }[] = [];
+
     for (const floor of floors) {
       const latest = historyByFloor[floor.id]?.[0];
       if (!latest || isStale(latest.created_at, now)) {
@@ -129,10 +136,20 @@ export default function DashboardPage() {
         soundLevel(latest.floor_sound_db, at),
         vibLevel(latest.floor_vibration, at)
       );
-      if (level === "over") over += 1;
-      else if (level === "detected") detected += 1;
+      candidates.push({ floorId: floor.id, level, reading: latest });
     }
-    return { over, detected, offline };
+
+    const activeFloorId = dominantFloorId(candidates);
+    const activeLevel = candidates.find((c) => c.floorId === activeFloorId)?.level;
+
+    return {
+      summary: {
+        over: activeLevel === "over" ? 1 : 0,
+        detected: activeLevel === "detected" ? 1 : 0,
+        offline,
+      },
+      activeFloorId,
+    };
   }, [floors, historyByFloor, now]);
 
   if (loading) {
@@ -209,6 +226,7 @@ export default function DashboardPage() {
             history={historyByFloor[floor.id] ?? []}
             openAlertCount={openAlertCountByFloor[floor.id] ?? 0}
             now={now}
+            suppressed={activeFloorId !== null && floor.id !== activeFloorId}
           />
         ))}
         <div className="building-ground" aria-hidden="true" />
