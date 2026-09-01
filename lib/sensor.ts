@@ -129,6 +129,78 @@ export function dominantFloorId(
   return best?.floorId ?? null;
 }
 
+/**
+ * 같은 시각(같은 배치 전송)에 여러 층이 함께 반응했을 때, 신호가 가장 강한 층만 원래 값을
+ * 유지하고 나머지 층은 감지 임계값 바로 아래로 눌러서 돌려준다. 게이지 막대 높이나 추이
+ * 그래프 선처럼 값 자체로 그려지는 화면 요소가, 새어들어온 층에서는 반응한 것처럼 보이지
+ * 않게 하기 위함이다. 판정 로직(soundLevel/vibLevel)과 DB 쪽 경고 발령에는 영향을 주지
+ * 않는, 순수 표시용 가공이다.
+ */
+export function suppressCrossTalk<
+  T extends {
+    floor_id: number;
+    floor_sound_db: number;
+    floor_vibration: number;
+    created_at: string;
+  }
+>(rowsAtSameInstant: T[]): T[] {
+  if (rowsAtSameInstant.length < 2) return rowsAtSameInstant;
+
+  const at = new Date(rowsAtSameInstant[0].created_at);
+  const candidates = rowsAtSameInstant.map((r) => ({
+    floorId: r.floor_id,
+    level: worstLevel(soundLevel(r.floor_sound_db, at), vibLevel(r.floor_vibration, at)),
+    reading: r,
+  }));
+  const dominant = dominantFloorId(candidates);
+  if (dominant === null) return rowsAtSameInstant;
+
+  return rowsAtSameInstant.map((r) =>
+    r.floor_id === dominant
+      ? r
+      : {
+          ...r,
+          floor_sound_db: Math.min(r.floor_sound_db, DETECT_SOUND_DB - 0.1),
+          floor_vibration: Math.min(r.floor_vibration, DETECT_VIB_DB - 0.1),
+        }
+  );
+}
+
+/**
+ * 층별 측정 이력 전체에 suppressCrossTalk 를 적용한다. 노드가 3개 층을 한 번에
+ * 배치 전송하므로 같은 created_at 을 가진 행끼리 같은 시점의 측정으로 묶는다.
+ */
+export function suppressHistoryCrossTalk<
+  T extends {
+    id: number;
+    floor_id: number;
+    floor_sound_db: number;
+    floor_vibration: number;
+    created_at: string;
+  }
+>(historyByFloor: Record<number, T[]>): Record<number, T[]> {
+  const byInstant = new Map<number, T[]>();
+  for (const rows of Object.values(historyByFloor)) {
+    for (const r of rows) {
+      const instant = new Date(r.created_at).getTime();
+      const bucket = byInstant.get(instant);
+      if (bucket) bucket.push(r);
+      else byInstant.set(instant, [r]);
+    }
+  }
+
+  const adjustedById = new Map<number, T>();
+  for (const rows of byInstant.values()) {
+    for (const r of suppressCrossTalk(rows)) adjustedById.set(r.id, r);
+  }
+
+  const result: Record<number, T[]> = {};
+  for (const [floorId, rows] of Object.entries(historyByFloor)) {
+    result[Number(floorId)] = rows.map((r) => adjustedById.get(r.id) ?? r);
+  }
+  return result;
+}
+
 export const LEVEL_LABEL: Record<SensorLevel, string> = {
   silent: "정상",
   detected: "소음 감지",
